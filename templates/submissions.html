@@ -29,7 +29,7 @@
         <td>{{ sub.image_key }}</td>
         <td>v{{ sub.attempt }}</td>
         <td class="mono small">{{ sub.original_name|default:"—" }}</td>
-        <td class="mono small">{{ sub.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td class="mono small nowrap">{{ sub.created_at|date:"Y-m-d H:i:s" }}</td>
         {% for m in item.task.metrics %}
           <td class="num mono">{{ sub.metrics|get_item:m.key|fmt:m.digits }}{% if m.unit %} <span class="muted small">{{ m.unit }}</span>{% endif %}</td>
         {% endfor %}

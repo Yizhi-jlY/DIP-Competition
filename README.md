@@ -148,6 +148,31 @@ systemctl --user enable --now dip-competition
 
 **Docker 方式（可选）**：`docker compose up -d --build`，见 `docker-compose.yml`（默认使用 PostgreSQL，适合机房统一部署）。
 
+### 用 git 维护（当前采用）
+
+代码仓库：<https://github.com/Yizhi-jlY/DIP-Competition>（私有）。服务器上的项目目录就是一个 clone，
+`.env`、`.venv`、`data/`、`storage/`、`staticfiles/` 都被 `.gitignore` 排除，所以 `git pull` 不会覆盖运行数据。
+
+```bash
+# 首次（已执行过，此处备查）
+git clone git@github.com:Yizhi-jlY/DIP-Competition.git ~/Desktop/DIP-Competition
+# 再把 .env / .venv / data / storage 放回项目目录
+
+# 日常更新：拉代码 → 装依赖 → 收集静态 → 迁移 → 重启
+~/Desktop/DIP-Competition/deploy/update.sh
+```
+
+`deploy/update.sh` 会用 `git diff` 判断 `requirements.txt` 是否变化，只在需要时重装依赖；
+最后打印当前提交号。改完代码记得先推送：
+
+```bash
+git add -A && git commit -m "说明" && git push
+```
+
+> 注意：`collectstatic` 之后必须重启服务，否则 WhiteNoise 仍使用启动时扫描到的旧文件清单，静态资源会 404。
+> `update.sh` 已经把这个顺序固定住了。
+
+
 ---
 
 ## 六、教师操作流程

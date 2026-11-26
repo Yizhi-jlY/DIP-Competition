@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Django
+staticfiles/
+storage/db.sqlite3
+storage/db.sqlite3-*
+storage/logs/
+storage/submissions/
+storage/baselines/
+
+# 本地环境与密钥
+.env
+accounts.csv
+scores.csv
+
+# 数据源与派生数据
+data/_sources/
+data/public/
+data/private/
+
+# 演示与临时
+_tmp/
+*.log

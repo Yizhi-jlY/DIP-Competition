@@ -1,0 +1,49 @@
+{% load static %}<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 · {{ site.title }}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <div class="auth-brand">
+      <span class="brand-mark">DIP</span>
+      <strong>{{ site.title }}</strong>
+    </div>
+    <h1>学生登录</h1>
+    <p class="sub">使用学号登录。初始密码由教师下发，首次登录后请立即修改。</p>
+
+    {% if form.non_field_errors %}
+      <div class="alert error">{{ form.non_field_errors|join:" " }}</div>
+    {% endif %}
+    {% if messages %}
+      {% for message in messages %}<div class="alert {{ message.tags }}">{{ message }}</div>{% endfor %}
+    {% endif %}
+
+    <form method="post" action="{% url 'login' %}">
+      {% csrf_token %}
+      <div class="field">
+        <label for="{{ form.username.id_for_label }}">学号 / 账号</label>
+        {{ form.username }}
+        {% if form.username.errors %}<div class="errorlist">{{ form.username.errors|join:" " }}</div>{% endif %}
+      </div>
+      <div class="field">
+        <label for="{{ form.password.id_for_label }}">密码</label>
+        {{ form.password }}
+        {% if form.password.errors %}<div class="errorlist">{{ form.password.errors|join:" " }}</div>{% endif %}
+      </div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="btn block" type="submit">登录</button>
+    </form>
+
+    <p class="small muted" style="margin-top:18px">
+      {{ site.subtitle }} · 提交结果图像，服务器自动评测并生成排行榜。
+    </p>
+  </div>
+</div>
+</body>
+</html>

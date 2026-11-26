@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-dip_competition}
+      POSTGRES_USER: ${DB_USER:-dip}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dip-pass-change-me}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dip} -d ${DB_NAME:-dip_competition}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?请在 .env 中设置}
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DB_ENGINE: postgres
+      DB_NAME: ${DB_NAME:-dip_competition}
+      DB_USER: ${DB_USER:-dip}
+      DB_PASSWORD: ${DB_PASSWORD:-dip-pass-change-me}
+      DB_HOST: db
+      DB_PORT: "5432"
+      SITE_BASE_URL: ${SITE_BASE_URL:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./data:/app/data
+      - ./config:/app/config:ro
+
+volumes:
+  pgdata:

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}首页 · {{ site.title }}{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="eyebrow">{{ site.subtitle }}</div>
+  <h1>{{ site.title }}</h1>
+  <p>{{ site.intro }}</p>
+  <div class="hero-meta">
+    <span class="badge {% if phase.code == 'submission' %}success{% elif phase.code == 'review' %}accent{% else %}warn{% endif %} dot">{{ phase.label }}</span>
+    {% if countdown %}<span>{{ phase.next_deadline_label }} {{ countdown }}</span>{% endif %}
+    <span>提交截止 {{ schedule.submission_close|date:"Y-m-d H:i"|default:"未设置" }}</span>
+  </div>
+  <div class="hero-actions">
+    {% for t in tasks %}
+      <a class="btn {% if not forloop.first %}ghost{% endif %}" href="{% url 'task_detail' t.slug %}">进入{{ t.name }}</a>
+    {% endfor %}
+    <a class="btn ghost" href="{% url 'leaderboard' %}">查看排行榜</a>
+  </div>
+</section>
+
+<div class="split" style="margin-top:18px">
+  <div>
+    <div class="section-title">
+      <h2>比赛任务</h2>
+      <span>共 {{ tasks|length }} 个任务，每个任务两张图像</span>
+    </div>
+
+    <div class="grid grid-2">
+      {% for item in my_tasks %}
+      <div class="card task-card">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div class="task-icon">{{ item.task.icon }}</div>
+          {% if item.complete %}
+            <span class="badge success">已确认最终作品</span>
+          {% elif item.latest %}
+            <span class="badge warn">已提交，待确认</span>
+          {% else %}
+            <span class="badge">尚未提交</span>
+          {% endif %}
+        </div>
+        <div>
+          <h3>{{ item.task.name }}</h3>
+          <p class="tagline">{{ item.task.tagline }}</p>
+        </div>
+        <div class="task-meta">
+          <span>图像 {{ item.task.images|length }} 张</span>
+          <span>单图上限 {{ item.task.max_submissions }} 次</span>
+          <span>{{ item.task.ranking_metric|upper }} 排名</span>
+        </div>
+        <div class="task-foot">
+          <span class="small muted">
+            {% if item.complete %}最终作品已冻结，等待评测{% elif item.latest %}已提交 {{ item.latest|length }} / {{ item.task.images|length }} 张{% else %}下载输入图像开始算法实现{% endif %}
+          </span>
+          <a class="btn small {% if item.complete %}ghost{% endif %}" href="{% url 'task_detail' item.task.slug %}">
+            {% if item.complete %}查看{% else %}去提交{% endif %}
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="section-title"><h2>比赛规则</h2><span>SIDD 真实噪声 · CADIK24 去色图像</span></div>
+    <div class="card card-pad">
+      <ul class="rules">
+        {% for rule in site.rules %}<li>{{ rule }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <aside>
+    <div class="card card-pad">
+      <h3 style="margin:0 0 12px;font-size:16px">赛程</h3>
+      <dl class="kv">
+        <dt>开放提交</dt><dd>{{ schedule.submission_open|date:"m-d H:i"|default:"—" }}</dd>
+        <dt>截止提交</dt><dd>{{ schedule.submission_close|date:"m-d H:i"|default:"—" }}</dd>
+        <dt>开放互评</dt><dd>{{ schedule.review_open|date:"m-d H:i"|default:"—" }}</dd>
+        <dt>截止互评</dt><dd>{{ schedule.review_close|date:"m-d H:i"|default:"—" }}</dd>
+      </dl>
+      {% if setting.announcement %}
+        <div class="alert info" style="margin-top:14px">{{ setting.announcement }}</div>
+      {% endif %}
+    </div>
+
+    <div class="card card-pad">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0;font-size:16px">匿名互评</h3>
+        <span class="badge accent">{{ review_done }} / {{ review_total }}</span>
+      </div>
+      <p class="small muted" style="margin:8px 0 10px">
+        针对同一彩色原图，比较两位同学的两张灰度结果。不显示姓名、算法与客观指标，左右位置随机。
+      </p>
+      <div class="progress" style="margin-bottom:12px">
+        <i style="width:{% if review_total %}{% widthratio review_done review_total 100 %}{% else %}0{% endif %}%"></i>
+      </div>
+      <a class="btn ghost block small" href="{% url 'review' %}">进入互评</a>
+    </div>
+
+    <div class="card card-pad">
+      <h3 style="margin:0 0 8px;font-size:16px">榜单说明</h3>
+      <p class="small muted" style="margin:0 0 8px">
+        去噪以平均 PSNR 排名、SSIM 作同分依据；去色客观榜以平均 E-score 排名；
+        去色主观榜使用 Bradley–Terry 偏好模型，由全班两两比较拟合得到。
+      </p>
+      <a class="small" href="{% url 'leaderboard' %}">查看三类排行榜 →</a>
+    </div>
+  </aside>
+</div>
+{% endblock %}

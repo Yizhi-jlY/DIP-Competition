@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}教师面板 · {{ site.title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="eyebrow">Teacher console</div>
+  <h1>教师面板</h1>
+  <p>{{ phase.label }} · 提交截止 {{ schedule.submission_close|date:"Y-m-d H:i" }} · 互评 {{ schedule.review_open|date:"m-d H:i" }} 至 {{ schedule.review_close|date:"m-d H:i" }}</p>
+</div>
+
+<div class="grid grid-4">
+  <div class="card card-pad stat"><span class="label">学生账号</span><span class="value">{{ student_count }}</span></div>
+  <div class="card card-pad stat"><span class="label">最终作品</span><span class="value">{{ stats.finals|default:0 }}</span></div>
+  <div class="card card-pad stat"><span class="label">互评进度</span><span class="value">{{ stats.done|default:0 }} / {{ stats.assigned|default:0 }}</span></div>
+  <div class="card card-pad stat"><span class="label">完成率</span><span class="value">{{ stats.progress|default:0 }}%</span></div>
+</div>
+
+<div class="split" style="margin-top:18px">
+  <div>
+    <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">互评管理</h3>
+      <p class="small muted">
+        分配任务时要求所有去色作品已确认为最终作品，互评阶段开始后作品自动冻结。
+        重新分配会清除已有投票记录，请谨慎操作。
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+        <form method="post" action="{% url 'staff_allocate' %}" onsubmit="return confirm('确认（重新）分配互评任务？已有投票将被清除。');">
+          {% csrf_token %}
+          <button class="btn small" type="submit">生成 / 重新分配互评任务</button>
+        </form>
+        <form method="post" action="{% url 'staff_refresh_subjective' %}">
+          {% csrf_token %}
+          <button class="btn ghost small" type="submit">重新拟合 Bradley–Terry</button>
+        </form>
+        <a class="btn ghost small" href="{% url 'leaderboard' %}?board=decolor-subjective">查看主观榜</a>
+      </div>
+
+      {% if stats.per_image %}
+      <table class="data" style="margin-top:16px;min-width:0">
+        <thead><tr><th>原图</th><th class="num">作品</th><th class="num">比较次数</th><th class="num">最少</th><th class="num">最多</th><th class="num">零覆盖</th></tr></thead>
+        <tbody>
+          {% for key, s in stats.per_image.items %}
+          <tr>
+            <td class="mono">{{ key }}</td>
+            <td class="num">{{ s.entries }}</td>
+            <td class="num">{{ s.comparisons }}</td>
+            <td class="num">{{ s.min }}</td>
+            <td class="num">{{ s.max }}</td>
+            <td class="num">{% if s.uncovered %}<span class="badge danger">{{ s.uncovered }}</span>{% else %}0{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+
+    <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">成绩与作品导出</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn small" href="{% url 'export_scores' %}">导出成绩 CSV</a>
+        <a class="btn ghost small" href="{% url 'export_submissions' %}">打包最终作品 ZIP</a>
+        <a class="btn ghost small" href="{% url 'staff_gallery' %}">作品讲评</a>
+        <a class="btn ghost small" href="/admin/" target="_blank">进入管理后台</a>
+      </div>
+      <p class="small muted" style="margin:10px 0 0">
+        成绩 CSV 含去噪 PSNR/SSIM、去色 CCPR/CCFR/E-score、主观分、名次与综合参考分；
+        ZIP 按 任务/原图/参赛编号.png 组织，并附 manifest.csv。
+      </p>
+    </div>
+
+    <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">上线验收</h3>
+      <table class="data" style="min-width:0">
+        <tbody>
+          {% for check in checks %}
+          <tr>
+            <td style="width:32px">{% if check.ok %}<span class="badge success">✓</span>{% else %}<span class="badge danger">!</span>{% endif %}</td>
+            <td>{{ check.label }}</td>
+            <td class="small muted">{{ check.detail }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <aside>
+    <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">任务数据</h3>
+      {% for t in tasks %}
+        <div style="margin-bottom:12px">
+          <strong>{{ t.name }}</strong>
+          <div class="small muted">
+            输入图 {{ t.images_ready|yesno:"就绪,缺失" }} ·
+            参考图 {% if t.channels == 3 %}{{ t.reference_ready|yesno:"就绪,缺失" }}{% else %}不需要{% endif %}
+          </div>
+          <div class="small muted">基线方法：{{ t.baseline_methods|join:"、" }}</div>
+        </div>
+      {% endfor %}
+      <div class="small muted">基线记录：{{ baseline_count }} 条</div>
+    </div>
+
+    <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">常用命令</h3>
+      <pre class="small mono" style="white-space:pre-wrap;margin:0;color:#4b5563">python manage.py import_students --csv students.csv
+python manage.py run_baselines
+python manage.py allocate_reviews
+python manage.py compute_rankings
+python manage.py export_scores --out scores.csv</pre>
+      <p class="small muted" style="margin:10px 0 0">详细说明见项目 README.md。</p>
+    </div>
+
+    <div class="card card-pad">
+      <h3 style="margin:0 0 8px;font-size:16px">赛程调整</h3>
+      <p class="small muted">可在 <a href="/admin/competition/appsetting/1/change/" target="_blank">运行设置</a> 中临时覆盖提交/互评时间与排行榜公开状态，无需重启服务。</p>
+    </div>
+  </aside>
+</div>
+{% endblock %}

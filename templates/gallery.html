@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load dip_extras %}
+{% block title %}作品讲评 · {{ site.title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="eyebrow">Review gallery</div>
+  <h1>作品讲评</h1>
+  <p>按客观指标选出排名最高与最低的最终作品，便于课堂比较“指标高”与“看起来自然”的差异。</p>
+</div>
+
+{% for section in sections %}
+<div class="section-title">
+  <h2>{{ section.task.name }}</h2>
+  <span>排名依据：平均 {{ section.task.ranking_metric|upper }}</span>
+</div>
+<div class="grid grid-2">
+  {% for card in section.cards %}
+  <div class="card card-pad">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div>
+        <span class="badge {% if card.kind == 'best' %}success{% else %}danger{% endif %}">
+          {% if card.kind == 'best' %}排名第 {{ card.row.rank }}{% else %}排名第 {{ card.row.rank }}（待改进）{% endif %}
+        </span>
+        <strong class="mono" style="margin-left:8px">{{ card.row.code }}</strong>
+      </div>
+      <span class="small muted">平均 {{ card.row.mean|fmt:4 }}</span>
+    </div>
+    <div class="image-grid" style="grid-template-columns:1fr 1fr">
+      {% for img in section.task.images %}
+        {% with sub=card.subs|get_item:img.key %}
+        <div class="image-card">
+          <div class="thumb" style="min-height:140px">
+            {% if sub %}<img src="{% url 'submission_image' sub.pk %}" alt="{{ img.key }}">{% endif %}
+          </div>
+          <div class="body">
+            <h4>{{ img.key }}</h4>
+            <p class="mono small">
+              {% for m in section.task.metrics %}
+                {{ m.name }} {{ sub.metrics|get_item:m.key|fmt:m.digits }}{% if not forloop.last %} · {% endif %}
+              {% endfor %}
+            </p>
+          </div>
+        </div>
+        {% endwith %}
+      {% endfor %}
+    </div>
+    <div class="help" style="margin-top:10px">
+      原始输入：<a href="{% url 'public_image' section.task.slug section.task.images.0.key %}" target="_blank">查看彩色/含噪输入</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% empty %}
+<div class="card card-pad"><p class="muted" style="margin:0">还没有足够的最终作品可供讲评。</p></div>
+{% endfor %}
+{% endblock %}

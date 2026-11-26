@@ -1,0 +1,13 @@
+# 与服务器实际部署环境一致的版本锁定（Python 3.12 / Linux x86_64）
+Django==5.2.19
+gunicorn==27.0.1
+whitenoise==6.12.0
+PyYAML==6.0.4
+pillow==13.0.0
+numpy==2.5.5
+scipy==1.18.1
+scikit-image==0.26.0
+opencv-python-headless==5.1.0.95
+# BM3D 基线（依赖 PyWavelets），不安装时命令会跳过该基线
+bm3d==4.0.3
+PyWavelets==1.10.0

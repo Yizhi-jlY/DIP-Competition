@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% load dip_extras %}
+{% block title %}{{ task.name }} · {{ site.title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="eyebrow">任务 · {{ task.slug }}</div>
+  <h1>{{ task.name }}</h1>
+  <p>{{ task.description }}</p>
+  <div class="hero-meta" style="margin-top:10px">
+    <span class="badge {% if phase.submission_open %}success{% else %}warn{% endif %} dot">{{ phase.label }}</span>
+    {% if countdown %}<span>{{ phase.next_deadline_label }} {{ countdown }}</span>{% endif %}
+    <span>提交格式 {{ task.file_format }} / {{ task.color_mode }} / {{ task.channels }} 通道</span>
+    <span>单图上限 {{ task.max_submissions }} 次</span>
+  </div>
+</div>
+
+<div class="split">
+  <div>
+    <div class="section-title">
+      <h2>输入图像与提交</h2>
+      <a class="small" href="{% url 'inputs_zip' task.slug %}">打包下载全部输入图</a>
+    </div>
+
+    <div class="image-grid">
+      {% for img in images_ctx %}
+      <div class="image-card">
+        <div class="thumb">
+          {% if img.exists %}
+            <img src="{{ img.url }}" alt="{{ img.spec.label }}">
+          {% else %}
+            <span class="muted small">输入图尚未准备</span>
+          {% endif %}
+        </div>
+        <div class="body">
+          <h4>{{ img.spec.label }}</h4>
+          <p>{{ img.spec.note }}</p>
+          <p class="small" style="margin-top:6px">
+            {% if img.size %}尺寸 {{ img.size.0 }}×{{ img.size.1 }} · {% endif %}
+            {% if img.is_final %}<span class="badge success">最终作品</span>
+            {% elif img.latest %}<span class="badge warn">已提交 v{{ img.latest.attempt }}</span>
+            {% else %}<span class="badge">未提交</span>{% endif %}
+          </p>
+          {% if img.latest and img.latest.metrics %}
+          <div class="small" style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap">
+            {% for m in metric_specs %}
+              <span><span class="muted">{{ m.name }}</span>
+                <strong class="mono">{{ img.metrics|get_item:m.key|fmt:m.digits }}</strong>{% if m.unit %}<span class="muted small">{{ m.unit }}</span>{% endif %}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="foot">
+          <a class="btn ghost small" href="{{ img.url }}" download>下载输入图</a>
+          {% if phase.submission_open %}
+            {% if img.remaining > 0 %}
+            <form method="post" enctype="multipart/form-data" action="{% url 'task_detail' task.slug %}">
+              {% csrf_token %}
+              <input type="hidden" name="image_key" value="{{ img.spec.key }}">
+              <input class="file-input" type="file" name="file" accept=".png,image/png" required>
+              <div class="help">剩余 {{ img.remaining }} 次提交机会</div>
+              <button class="btn small block" type="submit">上传并自动评分</button>
+            </form>
+            {% else %}
+              <div class="help">该图提交次数已用完（{{ task.max_submissions }} 次）。</div>
+            {% endif %}
+          {% else %}
+            <div class="help">当前阶段不接受提交。</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="section-title"><h2>提交记录</h2><span>仅显示最近 50 条</span></div>
+    <div class="card table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>图像</th><th>第几次</th><th>提交时间</th>
+            {% for m in metric_specs %}<th class="num">{{ m.name }}</th>{% endfor %}
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sub in history %}
+          <tr>
+            <td>{{ sub.image_key }}</td>
+            <td>{{ sub.attempt }}</td>
+            <td>{{ sub.created_at|date:"m-d H:i:s" }}</td>
+            {% for m in metric_specs %}
+              <td class="num mono">{{ sub.metrics|get_item:m.key|fmt:m.digits }}{% if m.unit %} <span class="muted small">{{ m.unit }}</span>{% endif %}</td>
+            {% endfor %}
+            <td>{% if sub.is_final %}<span class="badge success">最终</span>{% else %}<span class="badge">候选</span>{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="empty">还没有提交记录。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <aside>
+    <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">确认最终作品</h3>
+      {% if final_ready %}
+        <p class="small" style="margin:0 0 10px"><span class="badge success">两张图均已确认</span></p>
+        <p class="small muted">当前排名使用已确认的作品。截止前如重新提交，请再次确认。</p>
+        {% if phase.submission_open %}
+        <form method="post" action="{% url 'confirm_final' task.slug %}">
+          {% csrf_token %}
+          <button class="btn block small" type="submit">重新确认最新提交</button>
+        </form>
+        {% endif %}
+      {% else %}
+        <p class="small muted">需要为该任务的两张图像各提交一次结果，才能确认最终作品。</p>
+        {% if phase.submission_open %}
+        <form method="post" action="{% url 'confirm_final' task.slug %}">
+          {% csrf_token %}
+          <button class="btn block small" type="submit">确认为最终提交</button>
+        </form>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">提交要求</h3>
+      <ul class="rules small">
+        <li>文件格式：PNG（8-bit）</li>
+        <li>色彩模式：{{ task.color_mode }}，{{ task.channels }} 通道</li>
+        <li>尺寸必须与输入图完全一致，不缩放、不裁剪</li>
+        <li>不做全局归一化、不改变对比度映射之外的几何变换</li>
+        <li>每次上传即时评分，可多次提交，自行确认最终版本</li>
+      </ul>
+    </div>
+
+    <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">评分指标</h3>
+      {% for m in metric_specs %}
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between">
+            <strong>{{ m.name }}</strong>
+            <span class="small muted">{% if m.key == task.ranking_metric %}排名依据{% elif m.key == task.tiebreak_metric %}同分依据{% endif %}</span>
+          </div>
+          <div class="small muted">{{ m.hint }}</div>
+        </div>
+      {% endfor %}
+      {% if task.slug == 'decolor' %}
+        <p class="small muted" style="margin:10px 0 0">
+          去色没有唯一正确结果，客观指标之外还有全班匿名两两比较形成的主观榜。
+        </p>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+{% endblock %}

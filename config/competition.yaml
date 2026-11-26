@@ -1,0 +1,144 @@
+competition:
+  title: 数字图像处理课程挑战赛
+  subtitle: 图像去噪 · 图像去色
+  timezone: Asia/Shanghai
+  contest_code_prefix: S
+  anonymous: true
+  intro: >
+    本次测试包含两个任务：图像去噪与图像去色。学生只需在本地运行自己的算法，
+    将结果图像上传到本平台，服务器自动计算客观指标并更新排行榜；
+    去色任务在截止后额外进行匿名两两比较的主观评价。
+  rules:
+    - 每个任务提供两张输入图像，需分别提交两张同尺寸结果图。
+    - 去噪任务提交 8-bit RGB PNG（3 通道）；去色任务提交 8-bit 灰度 PNG（1 通道）。
+    - 不允许改变图像尺寸、不做全局重新归一化、不改变文件格式，否则判定为无效提交。
+    - 每个任务最多 5 次提交，以最后一次「确认为最终提交」的作品参与排名。
+    - 禁止直接使用他人结果或公开的参考图；去色任务不得直接复制 CADIK 主页上已有算法的结果。
+    - 截止后作品冻结，进入匿名互评阶段；互评阶段不可再修改作品。
+    - 互评采用两两比较，不显示作者、算法名与客观指标，左右位置随机。
+  data_note: >
+    去噪任务的参考图来自 SIDD（Smartphone Image Denoising Dataset），
+    去色任务图像来自 Čadík 等人在 2008 年公布的 color-to-gray 评测数据集。
+    参考图像仅保存在服务器私有目录，不通过任何 URL 对普通用户开放。
+
+schedule:
+  submission_open: 2026-11-26T08:00:00
+  submission_close: 2026-12-10T23:59:59
+  review_open: 2026-12-11T08:00:00
+  review_close: 2026-12-17T23:59:59
+
+tasks:
+  - slug: denoise
+    name: 图像去噪
+    short_name: 去噪
+    icon: "01"
+    tagline: 真实噪声与合成高斯噪声
+    description: >
+      两张含噪图像分别对应手机真实噪声与合成高斯噪声。请使用你实现的去噪算法
+      （传统方法或深度学习方法均可）恢复干净图像，并上传与原图同尺寸的 RGB 结果。
+    channels: 3
+    color_mode: RGB
+    file_format: PNG
+    max_submissions: 5
+    ranking_metric: psnr
+    tiebreak_metric: ssim
+    images:
+      - key: D01
+        label: 图 1 · 真实噪声
+        note: SIDD 手机真实噪声（sRGB）
+      - key: D02
+        label: 图 2 · 合成噪声
+        note: 干净图像 + 高斯噪声 σ=25/255
+    metrics:
+      - key: psnr
+        name: PSNR
+        unit: dB
+        digits: 2
+        higher_better: true
+        hint: 峰值信噪比，越高说明像素误差越小
+      - key: ssim
+        name: SSIM
+        unit: ""
+        digits: 4
+        higher_better: true
+        hint: 结构相似性，评价亮度、对比度与结构信息
+    baseline_methods:
+      - identity
+      - gaussian
+      - median
+      - bilateral
+      - nlm
+      - bm3d
+
+  - slug: decolor
+    name: 图像去色
+    short_name: 去色
+    icon: "02"
+    tagline: 彩色到灰度的对比度保持
+    description: >
+      去色没有唯一正确答案：好的算法要在压掉颜色的同时保留原图中可区分的颜色差异，
+      又不能凭空制造对比度。请提交两张与输入同尺寸的 8-bit 灰度图，
+      系统将计算 CCPR、CCFR 与 E-score，并在截止后组织匿名两两比较。
+    channels: 1
+    color_mode: L
+    file_format: PNG
+    max_submissions: 5
+    ranking_metric: escore
+    tiebreak_metric: ccpr
+    images:
+      - key: C01
+        label: 图 1 · 图形与色块
+        note: 人工图形，考察相近亮度颜色的可区分性
+      - key: C02
+        label: 图 2 · 自然场景
+        note: 自然图像，考察细节、对比度与自然性
+    metrics:
+      - key: ccpr
+        name: CCPR
+        unit: ""
+        digits: 4
+        higher_better: true
+        hint: 颜色对比度保持率，原图中可区分的颜色对在灰度中仍可区分
+      - key: ccfr
+        name: CCFR
+        unit: ""
+        digits: 4
+        higher_better: true
+        hint: 颜色内容保真率，抑制凭空制造的强对比与伪边缘
+      - key: escore
+        name: E-score
+        unit: ""
+        digits: 4
+        higher_better: true
+        hint: CCPR 与 CCFR 的调和平均
+    baseline_methods:
+      - rgb2gray
+      - opencv_decolor
+      - light_linear
+
+metrics_options:
+  # PSNR / SSIM
+  data_range: 255
+  ssim_win_size: 7
+  # 去色指标：Lu, Xu & Jia (IJCV 2014) 定义中的 CIELab 距离阈值 τ
+  decolor_tau: 5
+  # 每像素随机采样对数（官方 MATLAB 代码为 10）
+  decolor_pairs_per_pixel: 10
+  decolor_seed: 20140101
+
+peer_review:
+  enabled: true
+  task: decolor
+  comparisons_per_student: 10
+  allow_tie: true
+  random_swap: true
+  exclude_own_submission: true
+  anonymous: true
+  ranking_method: bradley_terry
+  tie_weight: 0.5
+  regularization: 1.0
+
+scoring:
+  # 去色综合分 Q = 100 * (w_obj * E_norm + w_subj * R)
+  weight_objective: 0.4
+  weight_subjective: 0.6

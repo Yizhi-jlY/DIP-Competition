@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}匿名互评 · {{ site.title }}{% endblock %}
+
+{% block content %}
+<div class="review-head">
+  <div>
+    <div class="eyebrow">匿名互评 · {{ task.name }}</div>
+    <h1 style="margin:0">请选择更合理的灰度转换结果</h1>
+    <p class="muted small" style="margin:6px 0 0">
+      第 {{ done|add:1 }} / {{ total }} 题 · 原图 {{ assignment.image_key }} · 不显示作者、算法与客观指标
+    </p>
+  </div>
+  <div style="min-width:180px">
+    <div class="small muted" style="display:flex;justify-content:space-between">
+      <span>进度</span><span>{{ done }} / {{ total }}</span>
+    </div>
+    <div class="progress"><i style="width:{{ percent }}%"></i></div>
+  </div>
+</div>
+
+<div class="review-original" style="margin-top:18px">
+  <img src="{{ original_url }}" alt="彩色原图">
+  <div>
+    <h3 style="margin:0 0 4px;font-size:16px">彩色原图</h3>
+    <p class="small muted" style="margin:0">
+      评价依据：颜色区域是否仍可区分、细节是否保留、对比度是否合理、整体是否自然、有无明显伪影。
+      两张结果在页面上的左右位置是随机的。
+    </p>
+  </div>
+</div>
+
+<form method="post" action="{% url 'review_vote' assignment.id %}" id="voteForm">
+  {% csrf_token %}
+  <input type="hidden" name="duration_ms" id="durationInput" value="0">
+  <input type="hidden" name="choice" id="choiceInput" value="">
+
+  <div class="review-pair">
+    <div class="result-panel">
+      <img src="{{ left_url }}" alt="结果 A">
+      <div class="caption">
+        <strong>结果 A</strong>
+        <span class="small muted">灰度结果</span>
+      </div>
+    </div>
+    <div class="result-panel">
+      <img src="{{ right_url }}" alt="结果 B">
+      <div class="caption">
+        <strong>结果 B</strong>
+        <span class="small muted">灰度结果</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="vote-row">
+    <button class="btn" type="submit" name="choice" value="left">结果 A 更好 <span class="small" style="opacity:.7">(A)</span></button>
+    <button class="btn" type="submit" name="choice" value="right">结果 B 更好 <span class="small" style="opacity:.7">(B)</span></button>
+  </div>
+  {% if allow_tie %}
+  <div class="vote-sub">
+    <button class="btn ghost" type="submit" name="choice" value="tie">两者质量相近</button>
+    <button class="btn ghost" type="submit" name="choice" value="both_bad">两者均存在明显问题</button>
+  </div>
+  {% endif %}
+
+  <p class="rubric">
+    凭第一印象即可，无需长时间纠结。每完成一次评价不可修改。
+  </p>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var start = Date.now();
+    document.getElementById('voteForm').addEventListener('submit', function () {
+      document.getElementById('durationInput').value = String(Date.now() - start);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      var key = e.key.toLowerCase();
+      var value = {a: 'left', b: 'right'}[key];
+      if (!value) return;
+      e.preventDefault();
+      var input = document.getElementById('choiceInput');
+      input.value = value;
+      document.getElementById('durationInput').value = String(Date.now() - start);
+      document.getElementById('voteForm').submit();
+    });
+  })();
+</script>
+{% endblock %}

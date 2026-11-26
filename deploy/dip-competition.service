@@ -1,0 +1,22 @@
+[Unit]
+Description=DIP Competition Platform (Gunicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jlyao/Desktop/DIP-Competition
+EnvironmentFile=/home/jlyao/Desktop/DIP-Competition/.env
+ExecStart=/home/jlyao/Desktop/DIP-Competition/.venv/bin/gunicorn web.wsgi:application \
+    --bind 0.0.0.0:8000 \
+    --workers 3 \
+    --threads 2 \
+    --timeout 90 \
+    --access-logfile - \
+    --error-logfile -
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=default.target

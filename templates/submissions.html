@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load dip_extras %}
+{% block title %}我的提交 · {{ site.title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="eyebrow">My submissions</div>
+  <h1>我的提交</h1>
+  <p>本人全部提交记录、评分与最终作品状态。排行榜上只显示你的参赛编号。</p>
+</div>
+
+{% for item in data %}
+<div class="section-title">
+  <h2>{{ item.task.name }}</h2>
+  <span>已确认 {{ item.finals|length }} / {{ item.task.images|length }} 张</span>
+</div>
+<div class="card table-wrap">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>图像</th><th>第几次</th><th>提交时间</th>
+        {% for m in item.task.metrics %}<th class="num">{{ m.name }}</th>{% endfor %}
+        <th>状态</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sub in item.subs %}
+      <tr class="{% if sub.is_final %}me{% endif %}">
+        <td>{{ sub.image_key }}</td>
+        <td>v{{ sub.attempt }}</td>
+        <td>{{ sub.created_at|date:"Y-m-d H:i:s" }}</td>
+        {% for m in item.task.metrics %}
+          <td class="num mono">{{ sub.metrics|get_item:m.key|fmt:m.digits }}{% if m.unit %} <span class="muted small">{{ m.unit }}</span>{% endif %}</td>
+        {% endfor %}
+        <td>{% if sub.is_final %}<span class="badge success">最终</span>{% else %}<span class="badge">候选</span>{% endif %}</td>
+        <td><a class="small" href="{% url 'submission_image' sub.pk %}" target="_blank">查看</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="12" class="empty">还没有提交。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+
+{% if subjective %}
+<div class="section-title"><h2>我的主观评价</h2><span>来自全班匿名两两比较</span></div>
+<div class="grid grid-3">
+  <div class="card card-pad stat"><span class="label">主观得分</span><span class="value">{{ subjective.score|fmt:2 }}</span></div>
+  <div class="card card-pad stat"><span class="label">主观名次</span><span class="value">{{ subjective.rank }}</span></div>
+  <div class="card card-pad stat"><span class="label">被比较次数</span><span class="value">{{ subjective.comparisons }}</span></div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,12 @@
+# 统一换行符：仓库内一律 LF，Windows 检出时由 autocrlf 处理
+* text=auto eol=lf
+
+# 二进制资源不要做换行/文本转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.zip binary
+*.ico binary
+
+# 这些文件在 diff 里不必显示
+*.css linguist-language=CSS

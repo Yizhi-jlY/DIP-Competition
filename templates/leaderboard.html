@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% load dip_extras %}
+{% block title %}排行榜 · {{ site.title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="eyebrow">Leaderboard</div>
+  <h1>排行榜</h1>
+  <p>去噪按平均 PSNR 排序（SSIM 同分依据）；去色客观榜按平均 E-score 排序；去色主观榜由全班匿名两两比较拟合得到。</p>
+</div>
+
+<div class="tabs">
+  <a href="?board=denoise" class="{% if board == 'denoise' %}active{% endif %}">图像去噪</a>
+  <a href="?board=decolor-objective" class="{% if board == 'decolor-objective' %}active{% endif %}">去色 · 客观</a>
+  <a href="?board=decolor-subjective" class="{% if board == 'decolor-subjective' %}active{% endif %}">去色 · 主观</a>
+</div>
+
+{% if not allowed %}
+  <div class="card card-pad">
+    <p class="muted" style="margin:0">教师尚未公开排行榜。提交期间可以在「我的提交」中查看自己的分数。</p>
+  </div>
+{% elif board == 'denoise' and task %}
+  <div class="section-title"><h2>{{ task.name }}</h2><span>按平均 {{ primary.name }} 排名 · {{ task.images|length }} 张图像</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th class="rank">排名</th><th>参赛编号</th>
+          {% for img in task.images %}<th class="num">{{ img.key }} {{ primary.name }}</th>{% endfor %}
+          <th class="num">平均 {{ primary.name }}</th>
+          <th class="num">平均 {{ secondary.name }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if user.profile.contest_code == row.code %}me{% endif %}">
+          <td class="rank">{{ row.rank|medal }}</td>
+          <td class="mono">{{ row.code }}</td>
+          {% for img in task.images %}
+            <td class="num mono">{{ row.per_image|get_item:img.key|get_item:task.ranking_metric|fmt:primary.digits }}</td>
+          {% endfor %}
+          <td class="num mono"><strong>{{ row.mean|fmt:primary.digits }}</strong></td>
+          <td class="num mono">{{ row.tiebreak|fmt:secondary.digits }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="empty">还没有已确认的最终作品。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if baselines %}
+  <div class="section-title"><h2>经典算法基线</h2><span>教师预置，不参与学生排名</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>方法</th>
+          {% for img in task.images %}<th class="num">{{ img.key }} {{ primary.name }}</th>{% endfor %}
+          <th class="num">平均 {{ primary.name }}</th><th class="num">平均 {{ secondary.name }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in baselines %}
+        <tr class="baseline">
+          <td>{{ row.code }}</td>
+          {% for img in task.images %}
+            <td class="num mono">{{ row.per_image|get_item:img.key|get_item:task.ranking_metric|fmt:primary.digits }}</td>
+          {% endfor %}
+          <td class="num mono"><strong>{{ row.mean|fmt:primary.digits }}</strong></td>
+          <td class="num mono">{{ row.tiebreak|fmt:secondary.digits }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if incomplete %}
+  <div class="section-title"><h2>未完成</h2><span>{{ incomplete|length }} 人缺少图像或未确认</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead><tr><th>参赛编号</th><th>缺少的图像</th></tr></thead>
+      <tbody>
+        {% for row in incomplete %}
+        <tr><td class="mono">{{ row.code }}</td><td>{{ row.missing|join:"、" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+{% elif board == 'decolor-objective' and task %}
+  <div class="section-title"><h2>{{ task.name }} · 客观评价</h2><span>按平均 {{ primary.name }} 排名</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th class="rank">排名</th><th>参赛编号</th>
+          {% for img in task.images %}<th class="num">{{ img.key }} E</th>{% endfor %}
+          <th class="num">平均 E-score</th>
+          <th class="num">平均 CCPR</th>
+          <th class="num">主观分</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if user.profile.contest_code == row.code %}me{% endif %}">
+          <td class="rank">{{ row.rank|medal }}</td>
+          <td class="mono">{{ row.code }}</td>
+          {% for img in task.images %}
+            <td class="num mono">{{ row.per_image|get_item:img.key|get_item:'escore'|fmt:4 }}</td>
+          {% endfor %}
+          <td class="num mono"><strong>{{ row.mean|fmt:4 }}</strong></td>
+          <td class="num mono">{{ row.tiebreak|fmt:4 }}</td>
+          <td class="num mono">
+            {% with subj=subjective_map|get_item:row.student.id %}
+              {{ subj.score|fmt:2 }}
+            {% endwith %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="empty">还没有已确认的最终作品。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="small muted" style="margin-top:10px">
+    综合参考分 Q = 100 × ({{ weights.weight_objective }} × 平均 E-score + {{ weights.weight_subjective }} × 主观分/100)，权重可由教师调整。
+  </p>
+
+  {% if baselines %}
+  <div class="section-title"><h2>经典算法基线</h2><span>RGB2Gray 与 OpenCV decolor 等方法</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>方法</th>
+          {% for img in task.images %}<th class="num">{{ img.key }} E</th>{% endfor %}
+          <th class="num">平均 E-score</th><th class="num">平均 CCPR</th></tr>
+      </thead>
+      <tbody>
+        {% for row in baselines %}
+        <tr class="baseline">
+          <td>{{ row.code }}</td>
+          {% for img in task.images %}
+            <td class="num mono">{{ row.per_image|get_item:img.key|get_item:'escore'|fmt:4 }}</td>
+          {% endfor %}
+          <td class="num mono"><strong>{{ row.mean|fmt:4 }}</strong></td>
+          <td class="num mono">{{ row.tiebreak|fmt:4 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+{% elif board == 'decolor-subjective' and task %}
+  <div class="section-title"><h2>{{ task.name }} · 匿名主观评价</h2><span>Bradley–Terry 偏好模型</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th class="rank">排名</th><th>参赛编号</th>
+          <th class="num">主观得分</th>
+          <th class="num">被比较次数</th>
+          {% for img in task.images %}<th class="num">{{ img.key }} 预测胜率</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if user.profile.contest_code == row.code %}me{% endif %}">
+          <td class="rank">{{ row.rank|medal }}</td>
+          <td class="mono">{{ row.code }}</td>
+          <td class="num mono"><strong>{{ row.score|fmt:2 }}</strong></td>
+          <td class="num mono">{{ row.comparisons }}</td>
+          {% for img in task.images %}
+            <td class="num mono">{{ row.per_image|get_item:img.key|fmt:1 }}</td>
+          {% endfor %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="empty">还没有互评记录。互评阶段开始后，完成投票即可生成主观榜。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if stats %}
+  <div class="grid grid-3" style="margin-top:16px">
+    <div class="card card-pad stat"><span class="label">已完成比较</span><span class="value">{{ stats.done }} / {{ stats.assigned }}</span></div>
+    <div class="card card-pad stat"><span class="label">互评进度</span><span class="value">{{ stats.progress }}%</span></div>
+    <div class="card card-pad stat"><span class="label">参与排名作品</span><span class="value">{{ stats.finals }}</span></div>
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

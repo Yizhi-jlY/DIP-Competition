@@ -87,10 +87,10 @@
           <tr>
             <td>{{ sub.image_key }}</td>
             <td class="nowrap">v{{ sub.attempt }}</td>
-            <td class="mono small" style="word-break:break-all">{{ sub.original_name|default:"—" }}</td>
+            <td class="mono small name-cell" title="{{ sub.original_name }}">{{ sub.original_name|default:"—" }}</td>
             <td class="mono small nowrap">{{ sub.created_at|date:"Y-m-d H:i:s" }}</td>
             {% for m in metric_specs %}
-              <td class="num mono">{{ sub.metrics|get_item:m.key|fmt:m.digits }}{% if m.unit %} <span class="muted small">{{ m.unit }}</span>{% endif %}</td>
+              <td class="num mono nowrap">{{ sub.metrics|get_item:m.key|fmt:m.digits }}{% if m.unit %} <span class="muted small">{{ m.unit }}</span>{% endif %}</td>
             {% endfor %}
             <td class="nowrap">
               {% if sub.is_final %}

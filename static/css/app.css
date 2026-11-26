@@ -337,3 +337,8 @@ table.data.compact th, table.data.compact td { padding: 5px 7px; }
 table.data.compact th { font-size: 11px; }
 
 table.data td.nowrap, table.data th.nowrap { white-space: nowrap; }
+
+/* 窄栏表格里的长文件名：省略号 + 悬停查看全名 */
+table.data td.name-cell {
+  max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

@@ -191,13 +191,17 @@ def task_detail(request: HttpRequest, slug: str):
                 "metrics": sub.metrics if sub else {},
             }
         )
+        best = pool[0] if pool else None
         confirm_ctx.append(
             {
                 "spec": img,
                 "pool": pool,
                 "confirmed": confirmed,
-                # 表单默认值：已确认过就沿用，否则取指标最好的那次
-                "default": confirmed or (pool[0] if pool else None),
+                # 表单默认值始终取该图指标最好的那次
+                "default": best,
+                "confirmed_differs": bool(
+                    confirmed and best and confirmed.pk != best.pk
+                ),
             }
         )
 

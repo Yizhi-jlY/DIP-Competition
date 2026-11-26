@@ -126,6 +126,12 @@
                 {% else %}<span class="badge">{{ row.pool|length }} 次候选</span>{% endif %}
               </div>
               {% if row.pool %}
+                {% if row.confirmed_differs %}
+                <div class="help" style="margin:0 0 4px;color:var(--warn)">
+                  已确认的是 v{{ row.confirmed.attempt }} · {{ row.confirmed.original_name }}（指标 {{ row.confirmed.metrics|get_item:task.ranking_metric|fmt:primary.digits }}），
+                  下面是更好的候选，再次确认即可替换。
+                </div>
+                {% endif %}
                 <select class="input small" name="pick_{{ row.spec.key }}">
                   {% for sub in row.pool %}
                   <option value="{{ sub.pk }}"{% if row.default and sub.pk == row.default.pk %} selected{% endif %}>{% if forloop.first %}★ 指标最好 · {% endif %}v{{ sub.attempt }} · {{ sub.original_name|default:"未命名" }} · {{ sub.created_at|date:"m-d H:i" }} · {{ primary.name }} {{ sub.metrics|get_item:task.ranking_metric|fmt:primary.digits }}</option>

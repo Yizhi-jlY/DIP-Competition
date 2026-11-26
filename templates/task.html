@@ -94,7 +94,7 @@
             <td class="nowrap">
               {% if sub.is_final %}
                 <span class="badge success">最终</span>
-                {% if sub.finalized_at %}<div class="muted small mono">确认于 {{ sub.finalized_at|date:"m-d H:i" }}</div>{% endif %}
+                {% if sub.finalized_at %}<div class="muted small mono" title="确认于 {{ sub.finalized_at|date:'Y-m-d H:i:s' }}">确认 {{ sub.finalized_at|date:"H:i" }}</div>{% endif %}
               {% else %}<span class="badge">候选</span>{% endif %}
             </td>
           </tr>

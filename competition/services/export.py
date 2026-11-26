@@ -9,10 +9,28 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 from competition.config import load_config
 from competition.models import Profile, Submission
 from competition.services import leaderboard
+
+
+def _when(value) -> str:
+    if not value:
+        return ""
+    return timezone.localtime(value).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _final_columns(sub: Optional[Submission]) -> Dict[str, str]:
+    """最终作品的「文件名 / 提交时间 / 确认时间」，方便教师核对用的是哪一次。"""
+    if sub is None:
+        return {"文件名": "", "提交时间": "", "确认时间": ""}
+    return {
+        "文件名": sub.original_name or "",
+        "提交时间": _when(sub.created_at),
+        "确认时间": _when(sub.finalized_at),
+    }
 
 
 def _fmt(value: Optional[float], digits: int = 4) -> str:
@@ -75,6 +93,8 @@ def score_rows() -> List[Dict[str, str]]:
                 metrics = sub.metrics if sub else {}
                 row[f"{img.key}_PSNR"] = _fmt(metrics.get("psnr"), 2)
                 row[f"{img.key}_SSIM"] = _fmt(metrics.get("ssim"), 4)
+                for k, v in _final_columns(sub).items():
+                    row[f"{img.key}_{k}"] = v
                 if metrics.get("psnr") is not None:
                     means_psnr.append(metrics["psnr"])
                 if metrics.get("ssim") is not None:
@@ -91,6 +111,8 @@ def score_rows() -> List[Dict[str, str]]:
                 row[f"{img.key}_CCPR"] = _fmt(metrics.get("ccpr"), 4)
                 row[f"{img.key}_CCFR"] = _fmt(metrics.get("ccfr"), 4)
                 row[f"{img.key}_E"] = _fmt(metrics.get("escore"), 4)
+                for k, v in _final_columns(sub).items():
+                    row[f"{img.key}_{k}"] = v
             dm = decolor_metrics.get(student.id, {})
             row["去色平均E"] = _fmt(dm.get("mean"), 4)
             row["去色平均CCPR"] = _fmt(dm.get("tie"), 4)

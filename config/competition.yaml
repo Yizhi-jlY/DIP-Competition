@@ -39,7 +39,7 @@ tasks:
     channels: 3
     color_mode: RGB
     file_format: PNG
-    max_submissions: 5
+    max_submissions: 0   # 0 = 不限提交次数
     ranking_metric: psnr
     tiebreak_metric: ssim
     images:
@@ -82,7 +82,7 @@ tasks:
     channels: 1
     color_mode: L
     file_format: PNG
-    max_submissions: 5
+    max_submissions: 0   # 0 = 不限提交次数
     ranking_metric: escore
     tiebreak_metric: ccpr
     images:

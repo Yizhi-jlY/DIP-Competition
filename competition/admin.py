@@ -5,6 +5,7 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.db.models import Count
+from django.utils import timezone
 from django.utils.html import format_html
 
 from competition.config import load_config
@@ -58,8 +59,8 @@ class ProfileAdmin(admin.ModelAdmin):
 @admin.register(Submission)
 class SubmissionAdmin(admin.ModelAdmin):
     list_display = (
-        "id", "task", "image_key", "owner", "attempt", "rank_display",
-        "is_final", "is_baseline", "created_at",
+        "id", "task", "image_key", "owner", "attempt", "original_name",
+        "rank_display", "is_final", "finalized_at", "is_baseline", "created_at",
     )
     list_filter = ("task", "image_key", "is_final", "is_baseline", "baseline_method")
     search_fields = (
@@ -68,7 +69,7 @@ class SubmissionAdmin(admin.ModelAdmin):
     )
     readonly_fields = (
         "metrics", "rank_value", "scored_at", "score_error", "created_at",
-        "width", "height", "channels", "size_bytes", "preview",
+        "finalized_at", "width", "height", "channels", "size_bytes", "preview",
     )
     autocomplete_fields = ("student",)
     actions = ("rescore", "mark_final", "unmark_final")
@@ -114,12 +115,14 @@ class SubmissionAdmin(admin.ModelAdmin):
             Submission.objects.filter(
                 student_id=sub.student_id, task=sub.task, image_key=sub.image_key, is_final=True
             ).exclude(pk=sub.pk).update(is_final=False)
-            Submission.objects.filter(pk=sub.pk).update(is_final=True)
+            Submission.objects.filter(pk=sub.pk).update(
+                is_final=True, finalized_at=timezone.now()
+            )
         self.message_user(request, "已更新最终提交标记。", messages.INFO)
 
     @admin.action(description="取消最终提交标记")
     def unmark_final(self, request, queryset):
-        updated = queryset.update(is_final=False)
+        updated = queryset.update(is_final=False, finalized_at=None)
         self.message_user(request, f"已取消 {updated} 条最终提交标记。", messages.INFO)
 
 

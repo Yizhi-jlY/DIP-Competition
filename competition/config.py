@@ -52,7 +52,7 @@ class TaskSpec:
     channels: int = 3
     color_mode: str = "RGB"
     file_format: str = "PNG"
-    max_submissions: int = 5
+    max_submissions: int = 0  # 0 或负数表示不限制提交次数
     ranking_metric: str = ""
     tiebreak_metric: str = ""
     images: tuple[TaskImage, ...] = ()
@@ -80,6 +80,28 @@ class TaskSpec:
             if m.key == key:
                 return m
         return None
+
+    @property
+    def unlimited(self) -> bool:
+        """单图提交次数是否不受限制。"""
+        return self.max_submissions is None or self.max_submissions <= 0
+
+    @property
+    def limit_label(self) -> str:
+        return "不限提交次数" if self.unlimited else f"单图上限 {self.max_submissions} 次"
+
+    def ranking_rule(self) -> str:
+        """一句话说明排行榜的排序依据，供页面直接展示。"""
+        primary = self.metric(self.ranking_metric)
+        if primary is None:
+            return ""
+        secondary = self.metric(self.tiebreak_metric)
+        unit = f"（{primary.unit}）" if primary.unit else ""
+        count = len(self.images) if self.images else 1
+        text = f"按 {count} 张图的平均 {primary.name}{unit} 从高到低排名"
+        if secondary is not None:
+            text += f"，{primary.name} 相同时比较平均 {secondary.name}"
+        return text
 
     def images_ready(self) -> bool:
         return all(self.public_image(img.key).exists() for img in self.images)
@@ -204,7 +226,7 @@ def _parse(raw: Dict[str, Any]) -> Config:
                 channels=int(item.get("channels", 3)),
                 color_mode=item.get("color_mode", "RGB"),
                 file_format=item.get("file_format", "PNG"),
-                max_submissions=int(item.get("max_submissions", 5)),
+                max_submissions=int(item.get("max_submissions", 0) or 0),
                 ranking_metric=item.get("ranking_metric", ""),
                 tiebreak_metric=item.get("tiebreak_metric", ""),
                 images=images,

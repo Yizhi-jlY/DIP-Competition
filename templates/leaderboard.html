@@ -6,7 +6,7 @@
 <div class="page-head">
   <div class="eyebrow">Leaderboard</div>
   <h1>排行榜</h1>
-  <p>去噪按平均 PSNR 排序（SSIM 同分依据）；去色客观榜按平均 E-score 排序；去色主观榜由全班匿名两两比较拟合得到。</p>
+  <p>去噪榜按两图平均 <strong>PSNR</strong>（dB）排序，PSNR 相同时比较平均 SSIM；去色客观榜按两图平均 <strong>E-score</strong> 排序，同分时比较平均 CCPR；去色主观榜由全班匿名两两比较的 Bradley–Terry 拟合结果排序。只有已确认的最终作品参与排名。</p>
 </div>
 
 <div class="tabs">
@@ -14,6 +14,17 @@
   <a href="?board=decolor-objective" class="{% if board == 'decolor-objective' %}active{% endif %}">去色 · 客观</a>
   <a href="?board=decolor-subjective" class="{% if board == 'decolor-subjective' %}active{% endif %}">去色 · 主观</a>
 </div>
+
+{% if allowed and task %}
+<div class="rule-note" style="margin:14px 0 18px">
+  <span class="rule-tag">排名依据</span>
+  {% if board == 'decolor-subjective' %}
+    <span>按 Bradley–Terry 偏好模型拟合的预测胜率（换算为 0–100 分）从高到低排名，数据来自全班对本任务两张图的匿名两两比较。</span>
+  {% else %}
+    <span>{{ ranking_rule }}</span>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if not allowed %}
   <div class="card card-pad">
@@ -27,8 +38,8 @@
         <tr>
           <th class="rank">排名</th><th>参赛编号</th>
           {% for img in task.images %}<th class="num">{{ img.key }} {{ primary.name }}</th>{% endfor %}
-          <th class="num">平均 {{ primary.name }}</th>
-          <th class="num">平均 {{ secondary.name }}</th>
+          <th class="num">平均 {{ primary.name }}<span class="th-note">排名依据</span></th>
+          <th class="num">平均 {{ secondary.name }}<span class="th-note">同分依据</span></th>
         </tr>
       </thead>
       <tbody>
@@ -57,7 +68,8 @@
         <tr>
           <th>方法</th>
           {% for img in task.images %}<th class="num">{{ img.key }} {{ primary.name }}</th>{% endfor %}
-          <th class="num">平均 {{ primary.name }}</th><th class="num">平均 {{ secondary.name }}</th>
+          <th class="num">平均 {{ primary.name }}<span class="th-note">排名依据</span></th>
+          <th class="num">平均 {{ secondary.name }}<span class="th-note">同分依据</span></th>
         </tr>
       </thead>
       <tbody>
@@ -98,9 +110,9 @@
         <tr>
           <th class="rank">排名</th><th>参赛编号</th>
           {% for img in task.images %}<th class="num">{{ img.key }} E</th>{% endfor %}
-          <th class="num">平均 E-score</th>
-          <th class="num">平均 CCPR</th>
-          <th class="num">主观分</th>
+          <th class="num">平均 E-score<span class="th-note">排名依据</span></th>
+          <th class="num">平均 CCPR<span class="th-note">同分依据</span></th>
+          <th class="num">主观分<span class="th-note">另一榜单</span></th>
         </tr>
       </thead>
       <tbody>
@@ -137,7 +149,8 @@
       <thead>
         <tr><th>方法</th>
           {% for img in task.images %}<th class="num">{{ img.key }} E</th>{% endfor %}
-          <th class="num">平均 E-score</th><th class="num">平均 CCPR</th></tr>
+          <th class="num">平均 E-score<span class="th-note">排名依据</span></th>
+          <th class="num">平均 CCPR<span class="th-note">同分依据</span></th></tr>
       </thead>
       <tbody>
         {% for row in baselines %}
@@ -162,7 +175,7 @@
       <thead>
         <tr>
           <th class="rank">排名</th><th>参赛编号</th>
-          <th class="num">主观得分</th>
+          <th class="num">主观得分<span class="th-note">排名依据</span></th>
           <th class="num">被比较次数</th>
           {% for img in task.images %}<th class="num">{{ img.key }} 预测胜率</th>{% endfor %}
         </tr>

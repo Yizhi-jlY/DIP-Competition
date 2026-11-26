@@ -155,6 +155,11 @@ class LeaderboardOrderTests(TestCase):
         self.assertEqual([r.code for r in rows], ["S011", "S012"])
         self.assertEqual(rows[0].rank, 1)
 
+    def test_ranking_rule_text(self):
+        rule = get_task("denoise").ranking_rule()
+        self.assertIn("平均 PSNR", rule)
+        self.assertIn("SSIM", rule)
+
 
 def cv_blur(array: np.ndarray) -> np.ndarray:
     out = array.astype(int).copy()
@@ -162,3 +167,118 @@ def cv_blur(array: np.ndarray) -> np.ndarray:
         array[:-2, 1:-1].astype(int) + array[2:, 1:-1] + array[1:-1, :-2] + array[1:-1, 2:]
     ) // 4
     return out.astype(np.uint8)
+
+
+class UnlimitedSubmissionTests(TestCase):
+    """yaml 里 max_submissions=0 时不限制提交次数。"""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.ws = Workspace(max_submissions=0)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.ws.cleanup()
+        super().tearDownClass()
+
+    def setUp(self):
+        self.student = make_student("20260021", "S021")
+        self.client.force_login(self.student)
+        self.task = get_task("denoise")
+
+    def test_accepts_many_submissions(self):
+        clean = np.asarray(Image.open(self.task.ground_truth("D01")))
+        last = None
+        for i in range(6):
+            last = self.client.post(
+                "/task/denoise/",
+                {
+                    "image_key": "D01",
+                    "file": SimpleUploadedFile(
+                        f"result_{i}.png", png_bytes(clean), content_type="image/png"
+                    ),
+                },
+                follow=True,
+            )
+        self.assertContains(last, "第 6 次提交成功")
+        self.assertEqual(
+            Submission.objects.filter(student=self.student, image_key="D01").count(), 6
+        )
+        self.assertContains(last, "不限提交次数")
+
+    def test_task_reports_unlimited(self):
+        task = get_task("denoise")
+        self.assertTrue(task.unlimited)
+        self.assertEqual(task.limit_label, "不限提交次数")
+
+
+class ConfirmFinalChoiceTests(TestCase):
+    """确认最终作品：默认取指标最好的一次，并记录确认时间。"""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.ws = Workspace(max_submissions=0)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.ws.cleanup()
+        super().tearDownClass()
+
+    def setUp(self):
+        self.student = make_student("20260031", "S031")
+        self.client.force_login(self.student)
+        self.task = get_task("denoise")
+        self.clean = np.asarray(Image.open(self.task.ground_truth("D01")))
+        self.noisy = np.asarray(Image.open(self.task.public_image("D01")))
+
+    def _upload(self, array, name):
+        return self.client.post(
+            "/task/denoise/",
+            {"image_key": "D01", "file": SimpleUploadedFile(name, png_bytes(array), content_type="image/png")},
+            follow=True,
+        )
+
+    def _pool(self):
+        return list(
+            Submission.objects.filter(student=self.student, image_key="D01").order_by("id")
+        )
+
+    def test_default_picks_best_metric(self):
+        self._upload(self.clean, "perfect.png")
+        self._upload(self.noisy, "noisy_copy.png")
+        good, bad = self._pool()
+        self.assertGreater(good.metrics["psnr"], bad.metrics["psnr"])
+
+        response = self.client.post("/task/denoise/confirm/", follow=True)
+        self.assertContains(response, "已确认最终作品")
+
+        good.refresh_from_db()
+        bad.refresh_from_db()
+        self.assertTrue(good.is_final)
+        self.assertFalse(bad.is_final)
+        self.assertIsNotNone(good.finalized_at)
+        self.assertContains(response, "perfect.png")
+
+    def test_explicit_choice_overrides_default(self):
+        self._upload(self.clean, "perfect.png")
+        self._upload(self.noisy, "noisy_copy.png")
+        good, bad = self._pool()
+
+        response = self.client.post(
+            "/task/denoise/confirm/", {"pick_D01": bad.pk}, follow=True
+        )
+        self.assertContains(response, "已确认最终作品")
+        good.refresh_from_db()
+        bad.refresh_from_db()
+        self.assertTrue(bad.is_final)
+        self.assertFalse(good.is_final)
+        self.assertIsNotNone(bad.finalized_at)
+        self.assertIsNone(good.finalized_at)
+
+    def test_history_lists_filename_and_time(self):
+        self._upload(self.clean, "my_result_v1.png")
+        page = self.client.get("/task/denoise/")
+        self.assertContains(page, "my_result_v1.png")
+        self.assertContains(page, "上传文件名")

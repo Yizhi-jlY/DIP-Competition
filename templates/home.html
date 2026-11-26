@@ -45,8 +45,8 @@
         </div>
         <div class="task-meta">
           <span>图像 {{ item.task.images|length }} 张</span>
-          <span>单图上限 {{ item.task.max_submissions }} 次</span>
-          <span>{{ item.task.ranking_metric|upper }} 排名</span>
+          <span>{{ item.task.limit_label }}</span>
+          <span>按平均 {{ item.primary.name|default:"指标" }} 排名</span>
         </div>
         <div class="task-foot">
           <span class="small muted">

@@ -91,7 +91,7 @@ def _color_image(size=64, seed=0):
 
 
 class Workspace:
-    def __init__(self):
+    def __init__(self, max_submissions: int = 2):
         self.root = Path(tempfile.mkdtemp(prefix="dip-test-"))
         for rel in ("data/public/denoise", "data/public/decolor",
                     "data/private/ground_truth", "storage", "config"):
@@ -104,9 +104,16 @@ class Workspace:
         Image.fromarray(clean, "RGB").save(self.root / "data/private/ground_truth/D01.png")
         Image.fromarray(clean, "RGB").save(self.root / "data/public/decolor/C01.png")
 
+        config = {
+            **CONFIG_TEMPLATE,
+            "tasks": [
+                {**task, "max_submissions": max_submissions}
+                for task in CONFIG_TEMPLATE["tasks"]
+            ],
+        }
         self.config_path = self.root / "config/competition.yaml"
         self.config_path.write_text(
-            yaml.safe_dump(CONFIG_TEMPLATE, allow_unicode=True), encoding="utf-8"
+            yaml.safe_dump(config, allow_unicode=True), encoding="utf-8"
         )
         self.override = override_settings(
             BASE_DIR=self.root,

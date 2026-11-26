@@ -74,7 +74,10 @@ def attempts_used(student: User, task: TaskSpec, image_key: str) -> int:
     ).count()
 
 
-def remaining_attempts(student: User, task: TaskSpec, image_key: str) -> int:
+def remaining_attempts(student: User, task: TaskSpec, image_key: str) -> Optional[int]:
+    """剩余提交次数；不限制时返回 None。"""
+    if task.unlimited:
+        return None
     return max(0, task.max_submissions - attempts_used(student, task, image_key))
 
 
@@ -90,7 +93,7 @@ def create_submission(
         raise SubmitError("无效的图像编号。")
 
     used = attempts_used(student, task, image_key)
-    if used >= task.max_submissions:
+    if not task.unlimited and used >= task.max_submissions:
         raise SubmitError(
             f"{image_key} 已提交 {used} 次，达到单图 {task.max_submissions} 次上限。"
         )
@@ -132,31 +135,70 @@ def create_submission(
     return submission, metrics
 
 
-def confirm_final(student: User, task: TaskSpec) -> List[Submission]:
-    """把每张图最近一次提交标记为最终作品，其余取消标记。"""
+def candidates(student: User, task: TaskSpec, image_key: str) -> List[Submission]:
+    """某张图的全部候选提交，按排名指标从好到底排序（无法评分排在最后）。"""
+    rows = list(
+        Submission.objects.filter(
+            student=student, task=task.slug, image_key=image_key, is_baseline=False
+        )
+    )
+    return sorted(rows, key=lambda s: (_metric_value(s, task), s.created_at, s.pk), reverse=True)
+
+
+def _metric_value(submission: Submission, task: TaskSpec) -> float:
+    metric = task.metric(task.ranking_metric)
+    if metric is None:
+        return float("-inf")
+    value = (submission.metrics or {}).get(metric.key)
+    if isinstance(value, (int, float)) and value == value:  # 排除 NaN
+        return float(value)
+    return float("-inf")
+
+
+def best_submission(student: User, task: TaskSpec, image_key: str) -> Optional[Submission]:
+    """该图像指标最好的一次提交（同分取更晚提交的那次）。"""
+    rows = candidates(student, task, image_key)
+    return rows[0] if rows else None
+
+
+def confirm_final(
+    student: User, task: TaskSpec, choices: Optional[Dict[str, int]] = None
+) -> List[Submission]:
+    """确认最终作品。
+
+    choices: {image_key: submission_id}。未指定的图像默认取该图排名指标最好的提交。
+    每张被确认的作品会记录 finalized_at，作为「何时确认了哪一次提交」的凭据。
+    """
     phase = current_phase()
     if not phase.submission_open:
         raise SubmitError(f"当前阶段为「{phase.label}」，无法再确认最终作品。")
 
+    choices = choices or {}
+    now = timezone.now()
     finals: List[Submission] = []
     with transaction.atomic():
         for img in task.images:
-            latest = (
-                Submission.objects.filter(
-                    student=student, task=task.slug, image_key=img.key, is_baseline=False
-                )
-                .order_by("-created_at", "-id")
-                .first()
-            )
-            if latest is None:
+            pool = candidates(student, task, img.key)
+            if not pool:
                 raise SubmitError(f"{img.label} 还没有提交结果，无法确认最终作品。")
+
+            chosen: Optional[Submission] = None
+            requested = choices.get(img.key)
+            if requested:
+                chosen = next((s for s in pool if s.pk == requested), None)
+                if chosen is None:
+                    raise SubmitError(f"{img.label} 选择的提交不存在，请刷新页面后重试。")
+            if chosen is None:
+                chosen = pool[0]
+
             Submission.objects.filter(
                 student=student, task=task.slug, image_key=img.key, is_final=True
-            ).exclude(pk=latest.pk).update(is_final=False)
-            if not latest.is_final:
-                latest.is_final = True
-                latest.save(update_fields=["is_final"])
-            finals.append(latest)
+            ).exclude(pk=chosen.pk).update(is_final=False, finalized_at=None)
+            if not chosen.is_final or chosen.finalized_at is None:
+                chosen.is_final = True
+                chosen.finalized_at = now
+                chosen.save(update_fields=["is_final", "finalized_at"])
+            finals.append(chosen)
     return finals
 
 

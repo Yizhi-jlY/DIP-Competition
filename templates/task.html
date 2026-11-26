@@ -11,7 +11,7 @@
     <span class="badge {% if phase.submission_open %}success{% else %}warn{% endif %} dot">{{ phase.label }}</span>
     {% if countdown %}<span>{{ phase.next_deadline_label }} {{ countdown }}</span>{% endif %}
     <span>提交格式 {{ task.file_format }} / {{ task.color_mode }} / {{ task.channels }} 通道</span>
-    <span>单图上限 {{ task.max_submissions }} 次</span>
+    <span>{{ task.limit_label }}</span>
   </div>
 </div>
 
@@ -53,12 +53,12 @@
         <div class="foot">
           <a class="btn ghost small" href="{{ img.url }}" download>下载输入图</a>
           {% if phase.submission_open %}
-            {% if img.remaining > 0 %}
+            {% if img.can_submit %}
             <form method="post" enctype="multipart/form-data" action="{% url 'task_detail' task.slug %}">
               {% csrf_token %}
               <input type="hidden" name="image_key" value="{{ img.spec.key }}">
               <input class="file-input" type="file" name="file" accept=".png,image/png" required>
-              <div class="help">剩余 {{ img.remaining }} 次提交机会</div>
+              <div class="help">可多次提交、随时覆盖；已提交 {{ img.attempts }} 次</div>
               <button class="btn small block" type="submit">上传并自动评分</button>
             </form>
             {% else %}
@@ -72,12 +72,12 @@
       {% endfor %}
     </div>
 
-    <div class="section-title"><h2>提交记录</h2><span>仅显示最近 50 条</span></div>
+    <div class="section-title"><h2>提交记录</h2><span>含文件名与提交时间 · 仅显示最近 50 条</span></div>
     <div class="card table-wrap">
       <table class="data">
         <thead>
           <tr>
-            <th>图像</th><th>第几次</th><th>提交时间</th>
+            <th>图像</th><th>第几次</th><th>上传文件名</th><th>提交时间</th>
             {% for m in metric_specs %}<th class="num">{{ m.name }}</th>{% endfor %}
             <th>状态</th>
           </tr>
@@ -86,15 +86,21 @@
           {% for sub in history %}
           <tr>
             <td>{{ sub.image_key }}</td>
-            <td>{{ sub.attempt }}</td>
-            <td>{{ sub.created_at|date:"m-d H:i:s" }}</td>
+            <td>v{{ sub.attempt }}</td>
+            <td class="mono small">{{ sub.original_name|default:"—" }}</td>
+            <td class="mono small">{{ sub.created_at|date:"Y-m-d H:i:s" }}</td>
             {% for m in metric_specs %}
               <td class="num mono">{{ sub.metrics|get_item:m.key|fmt:m.digits }}{% if m.unit %} <span class="muted small">{{ m.unit }}</span>{% endif %}</td>
             {% endfor %}
-            <td>{% if sub.is_final %}<span class="badge success">最终</span>{% else %}<span class="badge">候选</span>{% endif %}</td>
+            <td>
+              {% if sub.is_final %}
+                <span class="badge success">最终</span>
+                {% if sub.finalized_at %}<div class="muted small mono">确认于 {{ sub.finalized_at|date:"m-d H:i" }}</div>{% endif %}
+              {% else %}<span class="badge">候选</span>{% endif %}
+            </td>
           </tr>
           {% empty %}
-          <tr><td colspan="8" class="empty">还没有提交记录。</td></tr>
+          <tr><td colspan="12" class="empty">还没有提交记录。</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -103,24 +109,58 @@
 
   <aside>
     <div class="card card-pad">
-      <h3 style="margin:0 0 10px;font-size:16px">确认最终作品</h3>
-      {% if final_ready %}
-        <p class="small" style="margin:0 0 10px"><span class="badge success">两张图均已确认</span></p>
-        <p class="small muted">当前排名使用已确认的作品。截止前如重新提交，请再次确认。</p>
-        {% if phase.submission_open %}
+      <h3 style="margin:0 0 8px;font-size:16px">确认最终作品</h3>
+      <p class="small muted" style="margin:0 0 12px">
+        每张图默认选中<strong>指标最好</strong>的那次提交，也可以改成其它候选。
+        确认后系统会记录「哪张图 · 哪个文件名 · 何时提交 · 何时确认」，排行榜只统计已确认的作品。
+      </p>
+
+      {% if phase.submission_open %}
         <form method="post" action="{% url 'confirm_final' task.slug %}">
           {% csrf_token %}
-          <button class="btn block small" type="submit">重新确认最新提交</button>
+          {% for row in confirm_ctx %}
+            <div class="confirm-row">
+              <div class="confirm-head">
+                <span class="small"><strong>{{ row.spec.key }}</strong> {{ row.spec.label }}</span>
+                {% if row.confirmed %}<span class="badge success">已确认</span>
+                {% elif not row.pool %}<span class="badge warn">未提交</span>
+                {% else %}<span class="badge">{{ row.pool|length }} 次候选</span>{% endif %}
+              </div>
+              {% if row.pool %}
+                <select class="input small" name="pick_{{ row.spec.key }}">
+                  {% for sub in row.pool %}
+                  <option value="{{ sub.pk }}"{% if row.default and sub.pk == row.default.pk %} selected{% endif %}>{% if forloop.first %}★ 指标最好 · {% endif %}v{{ sub.attempt }} · {{ sub.original_name|default:"未命名" }} · {{ sub.created_at|date:"m-d H:i" }} · {{ primary.name }} {{ sub.metrics|get_item:task.ranking_metric|fmt:primary.digits }}</option>
+                  {% endfor %}
+                </select>
+              {% else %}
+                <div class="help">还没有提交，请先上传一次。</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+          <button class="btn block small" type="submit" style="margin-top:4px">确认以上作品为最终提交</button>
+          <p class="help" style="margin:8px 0 0">截止前可继续提交并重新确认，以最后一次确认为准。</p>
         </form>
-        {% endif %}
       {% else %}
-        <p class="small muted">需要为该任务的两张图像各提交一次结果，才能确认最终作品。</p>
-        {% if phase.submission_open %}
-        <form method="post" action="{% url 'confirm_final' task.slug %}">
-          {% csrf_token %}
-          <button class="btn block small" type="submit">确认为最终提交</button>
-        </form>
-        {% endif %}
+        <p class="small muted" style="margin:0">当前阶段已截止，最终作品不可再修改。</p>
+      {% endif %}
+
+      {% if confirmed_any %}
+      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+        <div class="small" style="font-weight:600;margin-bottom:6px">已确认记录</div>
+        <table class="data compact">
+          <thead><tr><th>图像</th><th>文件名</th><th class="num">提交时间</th><th class="num">确认时间</th></tr></thead>
+          <tbody>
+            {% for row in confirm_ctx %}{% if row.confirmed %}
+            <tr>
+              <td class="mono">{{ row.spec.key }}</td>
+              <td class="mono small" style="word-break:break-all">{{ row.confirmed.original_name|default:"—" }}</td>
+              <td class="num mono small">{{ row.confirmed.created_at|date:"m-d H:i:s" }}</td>
+              <td class="num mono small">{{ row.confirmed.finalized_at|date:"m-d H:i:s"|default:"—" }}</td>
+            </tr>
+            {% endif %}{% endfor %}
+          </tbody>
+        </table>
+      </div>
       {% endif %}
     </div>
 
@@ -136,7 +176,13 @@
     </div>
 
     <div class="card card-pad">
-      <h3 style="margin:0 0 10px;font-size:16px">评分指标</h3>
+      <h3 style="margin:0 0 10px;font-size:16px">评分指标与排名依据</h3>
+      {% if ranking_rule %}
+      <div class="rule-note">
+        <span class="rule-tag">排名依据</span>
+        <span>{{ ranking_rule }}</span>
+      </div>
+      {% endif %}
       {% for m in metric_specs %}
         <div style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between">

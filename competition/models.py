@@ -71,6 +71,7 @@ class Submission(models.Model):
     attempt = models.PositiveSmallIntegerField("第几次提交", default=1)
 
     is_final = models.BooleanField("已确认为最终提交", default=False)
+    finalized_at = models.DateTimeField("确认时间", null=True, blank=True)
     is_baseline = models.BooleanField("基线作品", default=False)
     baseline_method = models.CharField("基线方法", max_length=32, blank=True)
 

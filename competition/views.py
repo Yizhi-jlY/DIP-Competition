@@ -30,6 +30,7 @@ from competition.services.phase import current_phase
 from competition.services.submissions import (
     SubmitError,
     attempts_used,
+    candidates,
     confirm_final,
     create_submission,
     final_submissions,
@@ -107,6 +108,8 @@ def home(request: HttpRequest):
                 "latest": latest,
                 "complete": len(finals) == len(task.images),
                 "images_ready": task.images_ready(),
+                "primary": task.metric(task.ranking_metric),
+                "ranking_rule": task.ranking_rule(),
             }
         )
 
@@ -167,10 +170,14 @@ def task_detail(request: HttpRequest, slug: str):
     finals = final_submissions(request.user, task)
 
     images_ctx = []
+    confirm_ctx = []
     for img in task.images:
         path = task.public_image(img.key)
         size = reference_size(task, img.key)
         sub = latest.get(img.key)
+        used = attempts_used(request.user, task, img.key)
+        pool = candidates(request.user, task, img.key)
+        confirmed = finals.get(img.key)
         images_ctx.append(
             {
                 "spec": img,
@@ -178,10 +185,19 @@ def task_detail(request: HttpRequest, slug: str):
                 "exists": path.exists(),
                 "size": size,
                 "latest": sub,
-                "attempts": attempts_used(request.user, task, img.key),
-                "remaining": max(0, task.max_submissions - attempts_used(request.user, task, img.key)),
-                "is_final": img.key in finals,
+                "attempts": used,
+                "can_submit": task.unlimited or used < task.max_submissions,
+                "is_final": confirmed is not None,
                 "metrics": sub.metrics if sub else {},
+            }
+        )
+        confirm_ctx.append(
+            {
+                "spec": img,
+                "pool": pool,
+                "confirmed": confirmed,
+                # 表单默认值：已确认过就沿用，否则取指标最好的那次
+                "default": confirmed or (pool[0] if pool else None),
             }
         )
 
@@ -197,10 +213,14 @@ def task_detail(request: HttpRequest, slug: str):
             "task": task,
             "phase": phase,
             "images_ctx": images_ctx,
+            "confirm_ctx": confirm_ctx,
+            "confirmed_any": bool(finals),
+            "all_confirmed": len(finals) == len(task.images),
             "history": history,
-            "final_ready": len(finals) == len(task.images),
-            "max_submissions": task.max_submissions,
             "metric_specs": task.metrics,
+            "ranking_rule": task.ranking_rule(),
+            "primary": task.metric(task.ranking_metric),
+            "secondary": task.metric(task.tiebreak_metric),
             "config": load_config(),
         },
     )
@@ -210,13 +230,29 @@ def task_detail(request: HttpRequest, slug: str):
 @require_POST
 def confirm_final_view(request: HttpRequest, slug: str):
     task = get_task(slug)
+    choices: Dict[str, int] = {}
+    for img in task.images:
+        raw = request.POST.get(f"pick_{img.key}")
+        if not raw:
+            continue
+        try:
+            choices[img.key] = int(raw)
+        except (TypeError, ValueError):
+            messages.error(request, "提交选择无效，请刷新页面后重试。")
+            return redirect("task_detail", slug=slug)
     try:
-        finals = confirm_final(request.user, task)
+        finals = confirm_final(request.user, task, choices)
     except SubmitError as exc:
         messages.error(request, str(exc))
         return redirect("task_detail", slug=slug)
-    codes = "、".join(s.image_key for s in finals)
-    messages.success(request, f"已确认最终作品（{codes}），将以此参与排名。截止前可再次提交并重新确认。")
+
+    detail = "；".join(
+        f"{s.image_key} 用 {s.original_name or '未命名'}（{timezone.localtime(s.created_at):%m-%d %H:%M:%S} 提交）"
+        for s in finals
+    )
+    messages.success(
+        request, f"已确认最终作品：{detail}。截止前可再次提交并重新确认。"
+    )
     return redirect("task_detail", slug=slug)
 
 
@@ -283,6 +319,9 @@ def leaderboard_view(request: HttpRequest):
         rows = leaderboard.subjective_rows(decolor)
         ctx.update({"rows": rows, "task": decolor, "stats": leaderboard.review_stats(decolor)})
 
+    task_obj = ctx.get("task")
+    if task_obj is not None:
+        ctx["ranking_rule"] = task_obj.ranking_rule()
     return _base(request, "leaderboard.html", ctx)
 
 

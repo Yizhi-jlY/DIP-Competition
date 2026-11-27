@@ -13,7 +13,13 @@ from django.utils import timezone
 from PIL import Image
 
 from competition.config import get_task, load_config
-from competition.models import AppSetting, Profile, ReviewAssignment, Submission
+from competition.models import (
+    AppSetting,
+    ObjectiveRanking,
+    Profile,
+    ReviewAssignment,
+    Submission,
+)
 from competition.peer_review import allocation, ranking
 from competition.services import leaderboard, reviews
 from competition.services.scoring import score_submission
@@ -359,3 +365,95 @@ class MultiTaskReviewTests(TestCase):
         self.assertAlmostEqual(spec.combined_weights()["denoise"], 2 / 3)
         zero = ScoringSpec(denoise_subjective_weight=0, decolor_subjective_weight=0)
         self.assertEqual(zero.combined_weights(), {"denoise": 0.5, "decolor": 0.5})
+
+
+class ObjectiveRankingTests(TestCase):
+    """客观排名快照：教师后台看到的按指标排名要与榜单页一致。"""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.ws = Workspace()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.ws.cleanup()
+        super().tearDownClass()
+
+    def _make_students(self, task, count=4):
+        base = np.asarray(Image.open(task.public_image("D01")).convert("RGB"))
+        rng = np.random.default_rng(3)
+        users = []
+        for i in range(count):
+            user = User.objects.create_user(username=f"2026020{i}", password="pass12345")
+            Profile.objects.create(
+                user=user, student_id=f"2026020{i}", real_name=f"学生{i}",
+                contest_code=f"S20{i}", must_change_password=False,
+            )
+            users.append(user)
+            # 噪声越大 PSNR 越低，名次应当随 i 递减
+            noisy = np.clip(
+                base.astype(np.float32) + rng.normal(0, i * 6, base.shape), 0, 255
+            ).astype(np.uint8)
+            sub = Submission(
+                student=user, task=task.slug, image_key="D01", is_final=True,
+                width=noisy.shape[1], height=noisy.shape[0], channels=3,
+            )
+            sub.file.save(
+                f"{user.username}.png",
+                SimpleUploadedFile("n.png", png_bytes(noisy, "RGB")),
+                save=True,
+            )
+            score_submission(sub, task)
+        return users
+
+    def test_snapshot_matches_leaderboard(self):
+        task = get_task("denoise")
+        users = self._make_students(task)
+
+        rows, _, _ = leaderboard.objective_rows(task)
+        self.assertEqual(len(rows), len(users))
+
+        count = leaderboard.refresh_objective(task)
+        self.assertEqual(count, len(users))
+
+        snap = list(ObjectiveRanking.objects.filter(task="denoise").order_by("rank"))
+        self.assertEqual([s.student_id for s in snap], [r.student.id for r in rows])
+        self.assertEqual([s.rank for s in snap], list(range(1, len(users) + 1)))
+        for row, saved in zip(rows, snap):
+            self.assertAlmostEqual(saved.score, row.mean, places=6)
+            self.assertEqual(saved.metric, "psnr")
+            self.assertEqual(list(saved.per_image), ["D01"])
+
+        scores = [s.score for s in snap]
+        self.assertEqual(scores, sorted(scores, reverse=True), "名次要按指标从高到低")
+        self.assertGreater(scores[0], scores[-1])
+
+        # 重复重算不会产生重复行
+        leaderboard.refresh_objective(task)
+        self.assertEqual(ObjectiveRanking.objects.filter(task="denoise").count(), len(users))
+
+    def test_admin_lists_snapshot_readonly(self):
+        from django.test import RequestFactory
+
+        from competition.admin import ObjectiveRankingAdmin
+
+        task = get_task("denoise")
+        self._make_students(task)
+        leaderboard.refresh_objective(task)
+
+        staff = User.objects.create_user(
+            username="teacher3", password="pass12345", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(staff)
+        resp = self.client.get(reverse("admin:competition_objectiveranking_changelist"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "客观排名")
+        self.assertContains(resp, "S200")
+        self.assertContains(resp, "学生0")
+
+        admin_obj = ObjectiveRankingAdmin(ObjectiveRanking, None)
+        request = RequestFactory().get("/")
+        request.user = staff
+        self.assertFalse(admin_obj.has_add_permission(request))
+        self.assertFalse(admin_obj.has_delete_permission(request))

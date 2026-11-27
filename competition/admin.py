@@ -12,6 +12,7 @@ from competition.config import load_config
 from competition.models import (
     AppSetting,
     Comparison,
+    ObjectiveRanking,
     Profile,
     ReviewAssignment,
     Submission,
@@ -105,6 +106,7 @@ class SubmissionAdmin(admin.ModelAdmin):
                 ok += 1
             else:
                 fail += 1
+        leaderboard.refresh_all_objective()
         self.message_user(request, f"重新评分完成：成功 {ok}，失败 {fail}。", messages.INFO)
 
     @admin.action(description="设为最终提交（同图其他提交自动取消）")
@@ -118,11 +120,13 @@ class SubmissionAdmin(admin.ModelAdmin):
             Submission.objects.filter(pk=sub.pk).update(
                 is_final=True, finalized_at=timezone.now()
             )
+        leaderboard.refresh_all_objective()
         self.message_user(request, "已更新最终提交标记。", messages.INFO)
 
     @admin.action(description="取消最终提交标记")
     def unmark_final(self, request, queryset):
         updated = queryset.update(is_final=False, finalized_at=None)
+        leaderboard.refresh_all_objective()
         self.message_user(request, f"已取消 {updated} 条最终提交标记。", messages.INFO)
 
 
@@ -150,6 +154,70 @@ class SubjectiveRankingAdmin(admin.ModelAdmin):
     list_display = ("rank", "student", "task", "score", "comparisons", "computed_at")
     list_filter = ("task",)
     ordering = ("rank",)
+
+
+@admin.register(ObjectiveRanking)
+class ObjectiveRankingAdmin(admin.ModelAdmin):
+    """按指标算出的客观排名（排行榜页面实时计算，这里是最近一次快照）。"""
+
+    list_display = (
+        "rank", "code", "name", "task", "metric", "score_display", "tiebreak_display",
+        "computed_at",
+    )
+    list_filter = ("task", "metric")
+    search_fields = (
+        "student__username", "student__profile__student_id", "student__profile__contest_code",
+    )
+    ordering = ("task", "rank")
+    list_per_page = 50
+    actions = ("recompute",)
+    readonly_fields = (
+        "student", "task", "metric", "score", "tiebreak", "per_image", "rank", "computed_at",
+    )
+
+    @admin.display(description="参赛编号")
+    def code(self, obj):
+        profile = getattr(obj.student, "profile", None)
+        return profile.contest_code if profile else obj.student_id
+
+    @admin.display(description="姓名")
+    def name(self, obj):
+        profile = getattr(obj.student, "profile", None)
+        return profile.real_name if profile else "—"
+
+    @admin.display(description="排名指标均值", ordering="score")
+    def score_display(self, obj):
+        return "—" if obj.score is None else f"{obj.score:.4f}"
+
+    @admin.display(description="并列指标均值", ordering="tiebreak")
+    def tiebreak_display(self, obj):
+        return "—" if obj.tiebreak is None else f"{obj.tiebreak:.4f}"
+
+    @admin.display(description="分图指标")
+    def per_image_display(self, obj):
+        task = load_config().task_map().get(obj.task)
+        keys = [img.key for img in task.images] if task else sorted(obj.per_image)
+        parts = []
+        for key in keys:
+            values = obj.per_image.get(key) or {}
+            shown = " / ".join(
+                f"{k.upper()} {v:.4f}" if isinstance(v, (int, float)) else f"{k} {v}"
+                for k, v in values.items()
+            )
+            parts.append(f"{key}: {shown or '—'}")
+        return "；".join(parts)
+
+    @admin.action(description="按当前指标重算客观排名（全部任务）")
+    def recompute(self, request, queryset):
+        counts = leaderboard.refresh_all_objective()
+        detail = "、".join(f"{k} {v} 条" for k, v in counts.items()) or "无任务"
+        self.message_user(request, f"客观排名已重算：{detail}。", messages.INFO)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(AppSetting)

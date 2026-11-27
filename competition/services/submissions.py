@@ -199,7 +199,21 @@ def confirm_final(
                 chosen.finalized_at = now
                 chosen.save(update_fields=["is_final", "finalized_at"])
             finals.append(chosen)
+    transaction.on_commit(lambda: refresh_objective_snapshot(task))
     return finals
+
+
+def refresh_objective_snapshot(task: TaskSpec) -> None:
+    """刷新客观排名快照（仅教师后台展示用，页面始终实时计算）。
+
+    快照失败不影响学生确认作品，所以这里吞掉异常只记日志。
+    """
+    from competition.services import leaderboard
+
+    try:
+        leaderboard.refresh_objective(task)
+    except Exception:  # noqa: BLE001 - 快照是辅助数据
+        logger.exception("refresh_objective failed task=%s", task.slug)
 
 
 def final_submissions(student: User, task: TaskSpec) -> Dict[str, Submission]:

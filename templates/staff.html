@@ -78,8 +78,10 @@
         </form>
         <form method="post" action="{% url 'staff_refresh_subjective' %}">
           {% csrf_token %}
-          <button class="btn ghost small" type="submit">重新拟合 Bradley–Terry</button>
+          <button class="btn ghost small" type="submit">重算排名（客观 + 主观）</button>
         </form>
+        <a class="btn ghost small" href="{% url 'leaderboard' %}?board=denoise">去噪客观榜</a>
+        <a class="btn ghost small" href="{% url 'leaderboard' %}?board=decolor">去色客观榜</a>
         <a class="btn ghost small" href="{% url 'leaderboard' %}?board=denoise-subjective">去噪主观榜</a>
         <a class="btn ghost small" href="{% url 'leaderboard' %}?board=decolor-subjective">去色主观榜</a>
         <a class="btn ghost small" href="{% url 'leaderboard' %}?board=combined">综合主观榜</a>

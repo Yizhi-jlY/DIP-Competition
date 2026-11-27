@@ -161,15 +161,23 @@ def staff_allocate(request: HttpRequest):
 @staff_member_required
 @require_POST
 def staff_refresh_subjective(request: HttpRequest):
+    """重算两类排名快照：客观排名（按指标）+ 主观排名（Bradley–Terry 重拟合）。"""
     config = load_config()
-    updated = []
+    subjective = []
     for task in config.review_tasks():
         count = leaderboard.refresh_subjective(task)
-        updated.append(f"{task.short_name} {count} 条")
-    if updated:
-        messages.success(request, "已重新拟合 Bradley–Terry 模型，更新 " + "、".join(updated) + "。")
+        subjective.append(f"{task.short_name} {count} 条")
+    objective = leaderboard.refresh_all_objective()
+
+    parts = []
+    if objective:
+        parts.append("客观 " + "、".join(f"{k} {v} 条" for k, v in objective.items()))
+    if subjective:
+        parts.append("主观（Bradley–Terry）" + "、".join(subjective))
+    if parts:
+        messages.success(request, "已重算排名快照：" + "；".join(parts) + "。")
     else:
-        messages.error(request, "配置中没有开放互评的任务。")
+        messages.error(request, "配置中没有可用任务，未重算排名。")
     return redirect("staff_dashboard")
 
 

@@ -108,6 +108,7 @@ class Command(BaseCommand):
         if not options["keep_phase"]:
             self._set_phase()
 
+        self._refresh_rankings(config)
         self._summary(config, count, time.time() - started)
 
     # ------------------------------------------------------------ 教师 / 学生
@@ -285,6 +286,15 @@ class Command(BaseCommand):
         setting.review_close = now + timedelta(days=7)
         setting.save()
         self.stdout.write("赛程：提交已截止（2 小时前），互评进行中（7 天后截止）")
+
+    # ---------------------------------------------------------------- 排名快照
+    def _refresh_rankings(self, config) -> None:
+        """生成完就把两类排名快照写好，教师后台打开即是最新。"""
+        for task in config.review_tasks():
+            leaderboard.refresh_subjective(task)
+        counts = leaderboard.refresh_all_objective()
+        detail = "、".join(f"{k} {v} 条" for k, v in counts.items()) or "无任务"
+        self.stdout.write(f"排名快照已写入：客观 {detail}")
 
     # ---------------------------------------------------------------- 汇总
     def _summary(self, config, count: int, seconds: float) -> None:

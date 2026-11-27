@@ -1,4 +1,4 @@
-"""计算并保存主观排名（Bradley–Terry），两个任务分别拟合。"""
+"""计算并保存排名快照：客观排名（按指标）+ 主观排名（Bradley–Terry）。"""
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
@@ -8,7 +8,7 @@ from competition.services import leaderboard
 
 
 class Command(BaseCommand):
-    help = "拟合 Bradley–Terry 模型，输出各任务的主观排名并写入数据库快照"
+    help = "重算客观排名快照，并拟合 Bradley–Terry 写入各任务的主观排名"
 
     def add_arguments(self, parser):
         parser.add_argument("--task", default=None, help="只计算指定任务（默认全部）")
@@ -16,6 +16,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         config = load_config()
+
+        # 客观排名按指标算，与互评无关，先一起刷新（后台「客观排名」即是最新）
+        for slug, count in leaderboard.refresh_all_objective().items():
+            self.stdout.write(self.style.SUCCESS(f"[{slug}] 已更新 {count} 条客观排名。"))
         if options["task"]:
             task = config.task(options["task"])
             if not task or not config.peer_review.for_task(task.slug).enabled:

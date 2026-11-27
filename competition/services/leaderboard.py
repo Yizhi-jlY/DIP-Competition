@@ -5,10 +5,16 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models import Count
 
 from competition.config import TaskSpec, load_config
-from competition.models import Comparison, Submission, SubjectiveRanking
+from competition.models import (
+    Comparison,
+    ObjectiveRanking,
+    Submission,
+    SubjectiveRanking,
+)
 from competition.peer_review import ranking as bt
 
 BASELINE_LABELS = {
@@ -368,3 +374,35 @@ def refresh_subjective(task: TaskSpec) -> int:
         ]
     )
     return len(rows)
+
+
+def refresh_objective(task: TaskSpec) -> int:
+    """把客观排名（按 ``task.ranking_metric`` 均值）写入快照，返回更新条数。
+
+    排行榜页面仍然实时计算；这张表只服务教师后台的浏览、筛选与导出，
+    所以每次重算都整表替换该任务的行，避免留下过期名次。
+    """
+    rows, _, _ = objective_rows(task)
+    with transaction.atomic():
+        ObjectiveRanking.objects.filter(task=task.slug).delete()
+        ObjectiveRanking.objects.bulk_create(
+            [
+                ObjectiveRanking(
+                    student=r.student,
+                    task=task.slug,
+                    metric=task.ranking_metric,
+                    score=r.mean,
+                    tiebreak=r.tiebreak,
+                    per_image={k: v for k, v in r.per_image.items()},
+                    rank=r.rank or 0,
+                )
+                for r in rows
+                if r.student is not None
+            ]
+        )
+    return len(rows)
+
+
+def refresh_all_objective() -> Dict[str, int]:
+    """按配置里的每个任务重算客观排名，返回 {slug: 条数}。"""
+    return {task.slug: refresh_objective(task) for task in load_config().tasks}

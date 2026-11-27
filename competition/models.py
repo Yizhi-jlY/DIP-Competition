@@ -234,3 +234,36 @@ class SubjectiveRanking(models.Model):
 
     def __str__(self) -> str:
         return f"{self.student_id} {self.score:.1f} #{self.rank}"
+
+
+class ObjectiveRanking(models.Model):
+    """客观排名快照（按任务、按参赛者）。
+
+    排行榜页面永远实时计算，这里存的是「最近一次重算」的结果，供教师后台浏览、
+    筛选与导出；``computed_at`` 标明快照时间。重算时机：学生确认最终作品、教师
+    在后台改最终标记或重算指标、教师点「重算榜单」、演示数据生成完毕。
+    """
+
+    student = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="objective_rankings",
+        verbose_name="学生",
+    )
+    task = models.CharField("任务", max_length=32)
+    metric = models.CharField("排名指标", max_length=16, blank=True, default="")
+    score = models.FloatField("排名指标均值", null=True, blank=True)
+    tiebreak = models.FloatField("并列指标均值", null=True, blank=True)
+    per_image = models.JSONField("分图指标", default=dict, blank=True)
+    rank = models.PositiveIntegerField("名次", default=0)
+    computed_at = models.DateTimeField("计算时间", auto_now=True)
+
+    class Meta:
+        verbose_name = "客观排名"
+        verbose_name_plural = "客观排名"
+        ordering = ["task", "rank"]
+        constraints = [
+            models.UniqueConstraint(fields=["student", "task"], name="uniq_objective_per_student")
+        ]
+
+    def __str__(self) -> str:
+        value = "—" if self.score is None else f"{self.score:.4f}"
+        return f"{self.task} #{self.rank} {value}"

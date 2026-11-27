@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import io
+from datetime import timedelta
 
 import numpy as np
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
 from PIL import Image
 
 from competition.config import get_task, load_config
@@ -243,3 +246,34 @@ class MultiTaskReviewTests(TestCase):
 
         self.assertEqual(len(leaderboard.subjective_rows(denoise)), 4)
         self.assertEqual(leaderboard.subjective_rows(decolor), [])
+
+    def test_review_and_staff_pages_render(self):
+        users = self._students()
+        for i, user in enumerate(users):
+            self._denoise_sub(user, i)
+            self._decolor_sub(user, i)
+
+        reviews.allocate_reviews(get_task("denoise"), per_student=2, seed=1)
+        reviews.allocate_reviews(get_task("decolor"), per_student=2, seed=2)
+
+        setting = AppSetting.get()
+        setting.review_open = timezone.now() - timedelta(hours=1)
+        setting.review_close = timezone.now() + timedelta(days=1)
+        setting.save()
+
+        self.client.force_login(users[0])
+        resp = self.client.get(reverse("review"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "结果 A")
+        self.assertContains(resp, "结果 B")
+        self.assertContains(resp, "去噪")
+
+        resp = self.client.get(reverse("review") + "?task=decolor")
+        self.assertEqual(resp.status_code, 200)
+
+        staff = User.objects.create_user(username="teacher2", password="pass12345", is_staff=True)
+        self.client.force_login(staff)
+        resp = self.client.get(reverse("staff_dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "每人份数")
+        self.assertContains(resp, "学生注册")

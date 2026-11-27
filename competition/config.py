@@ -207,13 +207,8 @@ class Config:
         return {t.slug: t for t in self.tasks}
 
     def review_tasks(self) -> List["TaskSpec"]:
-        """已开放匿名互评的任务（按 yaml 中的配置顺序）。"""
-        out: List[TaskSpec] = []
-        for slug in self.peer_review.enabled_task_slugs():
-            task = self.task(slug)
-            if task is not None:
-                out.append(task)
-        return out
+        """已开放匿名互评的任务（按任务在页面上的展示顺序）。"""
+        return [t for t in self.tasks if self.peer_review.for_task(t.slug).enabled]
 
 
 def _dt(value: Any, tz: ZoneInfo) -> Optional[datetime]:

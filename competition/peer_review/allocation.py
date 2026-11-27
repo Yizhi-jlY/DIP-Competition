@@ -137,14 +137,25 @@ def _assign_for_image(
 def _build_pool(
     entries: Sequence[int], quota: int, rng: np.random.Generator
 ) -> Dict[Tuple[int, int], int]:
-    """用多轮随机配对生成候选池，覆盖均衡且尽量避免重复对。"""
+    """候选图像对池。
+
+    小规模（≤40 张）时直接枚举全部组合，保证配额总能被满足；
+    大规模时用多轮随机配对采样，避免 O(k²) 的内存与计算开销。
+    """
     k = len(entries)
     if k < 2:
         return {}
+    pool: Dict[Tuple[int, int], int] = {}
+    if k <= 40:
+        for i in range(k):
+            for j in range(i + 1, k):
+                a, b = entries[i], entries[j]
+                pool[(a, b) if a < b else (b, a)] = 0
+        return pool
+
     per_round = k // 2
     rounds = max(2, int(np.ceil((quota + 1) / max(per_round, 1) * k / 2)))
     rounds = min(rounds, 40)
-    pool: Dict[Tuple[int, int], int] = {}
     for _ in range(rounds):
         for a, b in _round_robin_matches(entries, rng):
             key = (a, b) if a < b else (b, a)

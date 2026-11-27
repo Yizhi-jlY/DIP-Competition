@@ -240,6 +240,14 @@ class AppSettingAdmin(admin.ModelAdmin):
         ("排行榜与计分", {
             "fields": ("leaderboard_public", "weight_objective", "weight_subjective")
         }),
+        ("总排名（三项线性加权，留空则使用 yaml）", {
+            "fields": ("total_weights", "total_normalize"),
+            "description": (
+                "total_weights 形如 {\"denoise\": 0.4, \"decolor\": 0.3, \"subjective\": 0.3}，"
+                "自动按比例归一化；total_normalize 填 score（分数归一化）或 rank（名次折算）。"
+                "日常调整建议用教师面板「总排名权重」，那里有三个输入框和下拉选择。"
+            ),
+        }),
         ("匿名互评份数（按任务覆盖 yaml）", {"fields": ("review_counts",)}),
         ("自助注册", {"fields": ("registration_open",)}),
         ("公告", {"fields": ("announcement",)}),

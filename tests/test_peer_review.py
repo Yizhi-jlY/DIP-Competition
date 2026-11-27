@@ -257,6 +257,8 @@ class MultiTaskReviewTests(TestCase):
         reviews.allocate_reviews(get_task("decolor"), per_student=2, seed=2)
 
         setting = AppSetting.get()
+        # 模拟赛程进入互评阶段：提交已截止、互评窗口已打开
+        setting.submission_close = timezone.now() - timedelta(hours=2)
         setting.review_open = timezone.now() - timedelta(hours=1)
         setting.review_close = timezone.now() + timedelta(days=1)
         setting.save()

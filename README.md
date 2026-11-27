@@ -223,16 +223,22 @@ git add -A && git commit -m "说明" && git push
 注册成功即登录，按现有编号规则自动分配参赛编号（S001、S002…），排行榜仍只显示匿名编号。
 不设邀请码、不限学号前缀、不需要教师审核、不强制改密。
 
-### 上线前演练
+### 上线前演练 / 演示数据
+
+一条命令灌满整套数据（账号 → 作品 → 确认最终作品 → 互评分配 → 模拟投票 → 赛程阶段）：
 
 ```bash
-python manage.py seed_demo --students 12        # 生成 12 个演示账号（密码 demo12345）
-python manage.py allocate_reviews --per-student 10
-python manage.py compute_rankings
-python manage.py seed_demo --clear              # 演练结束，删除全部演示数据
+python manage.py seed_demo --students 140     # 140 名学生 + 作品 + 互评 + 投票
+python manage.py seed_demo --clear            # 一键删除全部演示数据，赛程恢复 yaml 默认
 ```
 
-演示期间如需看到互评界面，可在「运行设置」把互评时间临时改成当前时间；演练后把四个时间字段清空即恢复 yaml 赛程。
+- 演示账号 `demo001`…`demo140`，统一密码 `demo12345`，参赛编号 `S101`…`S240`；
+  教师账号会被重置为 `teacher / teacher`（staff + superuser）。
+- 作品以平台自带的经典算法基线为上限，按每人的「能力值」在基线与原始输入之间插值，
+  PSNR / E-score 自然拉开档次；投票也按能力值模拟，主观排名与客观分数正相关。
+- 默认留 `--idle 10` 个学生一次都没投，其余投满，互评进度看起来像真的。
+- 结束后自动把赛程设为「提交已截止、互评进行中（7 天后截止）」，方便直接看榜单与后台；
+  加 `--keep-phase` 可保持原赛程不动，`--no-votes` 只分配不投票。
 
 ---
 

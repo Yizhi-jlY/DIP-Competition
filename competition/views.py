@@ -23,11 +23,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from competition.config import TaskSpec, get_task, load_config
-from competition.forms import LoginForm, UploadForm
+from competition.forms import LoginForm, RegistrationForm, UploadForm
 from competition.imaging import ImageValidationError, reference_size
-from competition.models import AppSetting, Comparison, ReviewAssignment, Submission
+from competition.models import AppSetting, Comparison, Profile, ReviewAssignment, Submission
 from competition.services import export as export_service
-from competition.services import leaderboard, reviews
+from competition.services import leaderboard, registration as registration_service, reviews
 from competition.services.phase import current_phase
 from competition.services.submissions import (
     SubmitError,
@@ -56,8 +56,16 @@ class CompetitionLoginView(LoginView):
     redirect_authenticated_user = True
 
     def form_valid(self, form):
+        user = form.get_user()
+        profile = getattr(user, "profile", None)
+        if profile is not None and profile.status != Profile.STATUS_ACTIVE:
+            if profile.status == Profile.STATUS_PENDING:
+                form.add_error(None, "账号正在等待教师审核，通过后即可登录。")
+            else:
+                form.add_error(None, "注册申请未通过，请联系任课教师。")
+            return self.form_invalid(form)
+
         response = super().form_valid(form)
-        profile = getattr(self.request.user, "profile", None)
         if profile and profile.must_change_password:
             messages.info(self.request, "首次登录，请先修改初始密码。")
             return redirect("password_change")
@@ -70,6 +78,10 @@ class CompetitionLoginView(LoginView):
         # 因此站点信息另用 brand 键传给模板。
         ctx["brand"] = config
         ctx["tasks"] = config.tasks
+        try:
+            ctx["registration_open"] = AppSetting.get().registration_open
+        except Exception:  # noqa: BLE001 - 数据库未初始化时仍可显示登录页
+            ctx["registration_open"] = False
         return ctx
 
 
@@ -96,6 +108,63 @@ class CompetitionPasswordChangeView(PasswordChangeView):
         return ctx
 
 
+# --------------------------------------------------------------- 自助注册
+def register_view(request: HttpRequest):
+    """学生用学号自助注册；开关、邀请码、审核策略均由教师面板控制。"""
+    config = load_config()
+    if request.user.is_authenticated:
+        return redirect("home")
+
+    setting = AppSetting.get()
+    require_code = bool((setting.registration_code or "").strip())
+    form = None
+
+    if setting.registration_open:
+        form = RegistrationForm(
+            request.POST or None,
+            require_code=require_code,
+        )
+        if request.method == "POST" and form.is_valid():
+            try:
+                profile = registration_service.register_student(
+                    form.cleaned_data["student_id"],
+                    form.cleaned_data["real_name"],
+                    form.cleaned_data["password1"],
+                    setting=setting,
+                )
+            except registration_service.RegistrationError as exc:
+                form.add_error(None, str(exc))
+            else:
+                if profile.status == Profile.STATUS_PENDING:
+                    messages.success(
+                        request, "注册申请已提交，教师审核通过后即可用学号登录。"
+                    )
+                    return redirect("login")
+                auth_login(
+                    request, profile.user, backend="django.contrib.auth.backends.ModelBackend"
+                )
+                messages.success(
+                    request, f"注册成功，你的参赛编号是 {profile.contest_code}。"
+                )
+                if profile.must_change_password:
+                    return redirect("password_change")
+                return redirect("home")
+
+    return render(
+        request,
+        "register.html",
+        {
+            "brand": config,
+            "tasks": config.tasks,
+            "form": form,
+            "open": setting.registration_open,
+            "require_code": require_code,
+            "setting": setting,
+        },
+        status=200 if setting.registration_open else 403,
+    )
+
+
 # --------------------------------------------------------------- 首页
 @login_required
 def home(request: HttpRequest):
@@ -119,11 +188,11 @@ def home(request: HttpRequest):
             }
         )
 
-    done, total = (0, 0)
+    review_progress = []
     if config.peer_review.enabled:
-        review_task = config.task(config.peer_review.task)
-        if review_task:
-            done, total = reviews.progress_for(request.user, review_task)
+        review_progress = reviews.progress_all(request.user, config)
+    review_done = sum(p["done"] for p in review_progress)
+    review_total = sum(p["total"] for p in review_progress)
 
     return _base(
         request,
@@ -133,8 +202,9 @@ def home(request: HttpRequest):
             "phase": phase,
             "setting": setting,
             "my_tasks": my_tasks,
-            "review_done": done,
-            "review_total": total,
+            "review_progress": review_progress,
+            "review_done": review_done,
+            "review_total": review_total,
             "config_json": config,
         },
     )
@@ -282,57 +352,70 @@ def leaderboard_view(request: HttpRequest):
     config = load_config()
     allowed = _board_allowed(request.user)
     board = request.GET.get("board", "denoise")
-    if board not in {"denoise", "decolor-objective", "decolor-subjective"}:
-        board = "denoise"
+    if board == "decolor-objective":  # 旧链接兼容
+        board = "decolor"
+    slugs = list(config.task_map())
+    valid = set(slugs) | {f"{slug}-subjective" for slug in slugs}
+    if board not in valid:
+        board = slugs[0] if slugs else "denoise"
 
-    denoise = config.task("denoise")
-    decolor = config.task("decolor")
+    board_tabs = []
+    for task in config.tasks:
+        board_tabs.append({"slug": task.slug, "label": task.short_name})
+        if config.peer_review.for_task(task.slug).enabled:
+            board_tabs.append(
+                {"slug": f"{task.slug}-subjective", "label": f"{task.short_name} · 主观"}
+            )
 
     ctx: Dict[str, object] = {
         "config": config,
         "board": board,
         "allowed": allowed,
-        "denoise": denoise,
-        "decolor": decolor,
+        "denoise": config.task("denoise"),
+        "decolor": config.task("decolor"),
+        "boards": board_tabs,
     }
 
     if not allowed:
         return _base(request, "leaderboard.html", ctx)
 
-    if board == "denoise" and denoise:
-        rows, incomplete, baselines = leaderboard.objective_rows(denoise)
-        ctx.update(
-            {
-                "rows": rows,
-                "incomplete": incomplete,
-                "baselines": baselines,
-                "task": denoise,
-                "primary": denoise.metric(denoise.ranking_metric),
-                "secondary": denoise.metric(denoise.tiebreak_metric),
-            }
-        )
-    elif board == "decolor-objective" and decolor:
-        rows, incomplete, baselines = leaderboard.objective_rows(decolor)
-        subj = {r.student.id: r for r in leaderboard.subjective_rows(decolor)}
-        ctx.update(
-            {
-                "rows": rows,
-                "incomplete": incomplete,
-                "baselines": baselines,
-                "task": decolor,
-                "primary": decolor.metric(decolor.ranking_metric),
-                "secondary": decolor.metric(decolor.tiebreak_metric),
-                "subjective_map": subj,
-                "weights": config.scoring,
-            }
-        )
-    elif board == "decolor-subjective" and decolor:
-        rows = leaderboard.subjective_rows(decolor)
-        ctx.update({"rows": rows, "task": decolor, "stats": leaderboard.review_stats(decolor)})
+    if board.endswith("-subjective"):
+        task = config.task(board[: -len("-subjective")])
+        if task:
+            ctx.update(
+                {
+                    "rows": leaderboard.subjective_rows(task),
+                    "task": task,
+                    "board_type": "subjective",
+                    "stats": leaderboard.review_stats(task),
+                    "review_count": reviews.effective_count(task, config),
+                    "ranking_rule": task.ranking_rule(),
+                }
+            )
+    else:
+        task = config.task(board)
+        if task:
+            rows, incomplete, baselines = leaderboard.objective_rows(task)
+            ctx.update(
+                {
+                    "rows": rows,
+                    "incomplete": incomplete,
+                    "baselines": baselines,
+                    "task": task,
+                    "board_type": "objective",
+                    "primary": task.metric(task.ranking_metric),
+                    "secondary": task.metric(task.tiebreak_metric),
+                    "ranking_rule": task.ranking_rule(),
+                }
+            )
+            if config.peer_review.for_task(task.slug).enabled:
+                ctx["show_subjective"] = True
+                ctx["subjective_map"] = {
+                    r.student.id: r for r in leaderboard.subjective_rows(task)
+                }
+            if task.slug == "decolor":
+                ctx["weights"] = config.scoring
 
-    task_obj = ctx.get("task")
-    if task_obj is not None:
-        ctx["ranking_rule"] = task_obj.ranking_rule()
     return _base(request, "leaderboard.html", ctx)
 
 
@@ -344,43 +427,63 @@ def review_view(request: HttpRequest):
     if not config.peer_review.enabled:
         return _base(request, "review_done.html", {"enabled": False})
 
-    task = get_task(config.peer_review.task)
+    task_list = config.review_tasks()
+    if not task_list:
+        return _base(request, "review_done.html", {"enabled": False})
+
+    progress = reviews.progress_all(request.user, config)
+    by_slug = {p["task"].slug: p for p in progress}
+
+    # 默认跳到「还有待评任务」的第一个；都完成了就停在第一个任务
+    slug = request.GET.get("task")
+    if slug not in by_slug:
+        slug = next(
+            (p["task"].slug for p in progress if p["total"] > p["done"]),
+            task_list[0].slug,
+        )
+    task = by_slug[slug]["task"]
+    done, total = by_slug[slug]["done"], by_slug[slug]["total"]
     phase = current_phase(config)
-    done, total = reviews.progress_for(request.user, task)
+
+    base_ctx = {
+        "enabled": True,
+        "phase": phase,
+        "task": task,
+        "review_tasks": progress,
+        "done": done,
+        "total": total,
+    }
 
     if not phase.review_open:
+        return _base(request, "review_done.html", {**base_ctx, "not_open": True})
+
+    assignment = reviews.next_assignment(request.user, task)
+    if assignment is None:
+        all_done = all(p["total"] and p["done"] >= p["total"] for p in progress)
+        next_pending = next(
+            (p for p in progress if p["total"] > p["done"] and p["task"].slug != task.slug),
+            None,
+        )
         return _base(
             request,
             "review_done.html",
             {
-                "enabled": True,
-                "phase": phase,
-                "task": task,
-                "done": done,
-                "total": total,
-                "not_open": True,
+                **base_ctx,
+                "finished": True,
+                "all_done": all_done,
+                "next_pending": next_pending,
             },
-        )
-
-    assignment = reviews.next_assignment(request.user, task)
-    if assignment is None:
-        return _base(
-            request,
-            "review_done.html",
-            {"enabled": True, "task": task, "done": done, "total": total, "finished": True},
         )
 
     return _base(
         request,
         "review.html",
         {
-            "task": task,
+            **base_ctx,
             "assignment": assignment,
             "original_url": reverse("public_image", args=[task.slug, assignment.image_key]),
             "left_url": reverse("review_image", args=[assignment.id, "left"]),
             "right_url": reverse("review_image", args=[assignment.id, "right"]),
-            "done": done,
-            "total": total,
             "percent": round(done / total * 100) if total else 0,
             "allow_tie": config.peer_review.allow_tie,
         },
@@ -391,11 +494,15 @@ def review_view(request: HttpRequest):
 @require_POST
 def review_vote(request: HttpRequest, assignment_id: int):
     config = load_config()
-    task = get_task(config.peer_review.task)
     assignment = get_object_or_404(ReviewAssignment, pk=assignment_id, reviewer=request.user)
+    back = redirect(f"{reverse('review')}?task={assignment.task}")
+
+    if not config.peer_review.for_task(assignment.task).enabled:
+        messages.error(request, "该任务当前未开放互评。")
+        return back
     if not current_phase(config).review_open:
         messages.error(request, "当前不在互评阶段，投票未记录。")
-        return redirect("review")
+        return back
 
     choice = request.POST.get("choice", "")
     duration = request.POST.get("duration_ms", "0")
@@ -406,7 +513,7 @@ def review_vote(request: HttpRequest, assignment_id: int):
 
     if choice == "tie" and not config.peer_review.allow_tie:
         messages.error(request, "本次互评不允许选择「两者相近」。")
-        return redirect("review")
+        return back
 
     try:
         reviews.record_vote(assignment, choice, duration_ms)
@@ -414,7 +521,7 @@ def review_vote(request: HttpRequest, assignment_id: int):
         messages.error(request, str(exc))
     else:
         messages.success(request, "已记录本次评价，感谢参与。")
-    return redirect("review")
+    return back
 
 
 # --------------------------------------------------------------- 我的提交
@@ -543,12 +650,37 @@ def inputs_zip(request: HttpRequest, slug: str):
 @require_GET
 def staff_dashboard(request: HttpRequest):
     config = load_config()
-    decolor = config.task("decolor")
-    stats = leaderboard.review_stats(decolor) if decolor else {}
+    setting = AppSetting.get()
 
-    from competition.models import Profile
+    review_rows = []
+    for task in config.review_tasks():
+        stats = leaderboard.review_stats(task)
+        review_rows.append(
+            {
+                "task": task,
+                "stats": stats,
+                "count": reviews.effective_count(task, config),
+            }
+        )
+    assigned = sum(r["stats"]["assigned"] for r in review_rows)
+    done = sum(r["stats"]["done"] for r in review_rows)
+    review_totals = {
+        "assigned": assigned,
+        "done": done,
+        "progress": round(done / assigned * 100, 1) if assigned else 0,
+    }
 
-    student_count = Profile.objects.count()
+    student_count = Profile.objects.filter(status=Profile.STATUS_ACTIVE).count()
+    pending_profiles = list(
+        Profile.objects.filter(status=Profile.STATUS_PENDING)
+        .select_related("user")
+        .order_by("imported_at")
+    )
+    reg_counts = {
+        "active": student_count,
+        "pending": len(pending_profiles),
+        "rejected": Profile.objects.filter(status=Profile.STATUS_REJECTED).count(),
+    }
     baseline_count = Submission.objects.filter(is_baseline=True).count()
     final_count = Submission.objects.filter(is_final=True, is_baseline=False).count()
 
@@ -564,9 +696,9 @@ def staff_dashboard(request: HttpRequest):
             "detail": f"{baseline_count} 条基线记录",
         },
         {
-            "label": "学生账号已导入",
+            "label": "学生账号可用",
             "ok": student_count > 0,
-            "detail": f"{student_count} 个账号",
+            "detail": f"{student_count} 个正常账号，{reg_counts['pending']} 个待审核",
         },
         {
             "label": "最终作品已确认",
@@ -574,18 +706,25 @@ def staff_dashboard(request: HttpRequest):
             "detail": f"{final_count} 张图像",
         },
         {
-            "label": "互评任务已分配",
-            "ok": bool(stats.get("assigned")),
-            "detail": f"{stats.get('assigned', 0)} 条任务",
+            "label": "两个任务的互评任务均已分配",
+            "ok": bool(review_rows) and all(r["stats"]["assigned"] for r in review_rows),
+            "detail": "、".join(
+                f"{r['task'].short_name} {r['stats']['assigned']} 条" for r in review_rows
+            ) or "未配置互评任务",
         },
         {
             "label": "互评投票进行中",
-            "ok": bool(stats.get("done")),
-            "detail": f"{stats.get('done', 0)} 次已记录",
+            "ok": done > 0,
+            "detail": f"{done} 次已记录",
+        },
+        {
+            "label": "自助注册已开放",
+            "ok": setting.registration_open,
+            "detail": "教师面板可随时开关",
         },
         {
             "label": "排行榜已公开",
-            "ok": AppSetting.get().leaderboard_public,
+            "ok": setting.leaderboard_public,
             "detail": "可在运行设置中切换",
         },
     ]
@@ -595,10 +734,14 @@ def staff_dashboard(request: HttpRequest):
         "staff.html",
         {
             "config": config,
-            "stats": stats,
-            "decolor": decolor,
+            "setting": setting,
+            "review_rows": review_rows,
+            "review_totals": review_totals,
+            "pending_profiles": pending_profiles,
+            "reg_counts": reg_counts,
             "student_count": student_count,
             "baseline_count": baseline_count,
+            "final_count": final_count,
             "checks": checks,
         },
     )
@@ -608,21 +751,45 @@ def staff_dashboard(request: HttpRequest):
 @require_POST
 def staff_allocate(request: HttpRequest):
     config = load_config()
-    task = get_task(config.peer_review.task)
-    try:
-        summary = reviews.allocate_reviews(task)
-    except ValueError as exc:
-        messages.error(request, str(exc))
-        return redirect("staff_dashboard")
-
-    msg = (
-        f"已生成 {summary['assignments']} 条互评任务，覆盖 {summary['reviewers']} 位学生；"
-        f"每张图平均被评价 {summary['coverage']['mean']} 次，最少 {summary['coverage']['min']} 次。"
-    )
-    if summary["issues"]:
-        messages.warning(request, msg + " 检查提示：" + "；".join(summary["issues"][:5]))
+    slug = request.POST.get("task", "")
+    if slug in {"", "all"}:
+        targets = config.review_tasks()
+        if not targets:
+            messages.error(request, "配置中没有开放互评的任务。")
+            return redirect("staff_dashboard")
     else:
-        messages.success(request, msg)
+        target = config.task(slug)
+        if target is None or not config.peer_review.for_task(slug).enabled:
+            messages.error(request, "该任务未开放互评。")
+            return redirect("staff_dashboard")
+        targets = [target]
+
+    lines, problems = [], []
+    for task in targets:
+        try:
+            summary = reviews.allocate_reviews(task)
+        except ValueError as exc:
+            problems.append(str(exc))
+            continue
+        lines.append(
+            f"{task.name}：生成 {summary['assignments']} 条任务，覆盖 {summary['reviewers']} 位学生，"
+            f"每人 {summary['per_student']} 份，每张图平均被评 {summary['coverage']['mean']} 次"
+            f"（最少 {summary['coverage']['min']} 次）"
+        )
+        problems.extend(summary["issues"][:3])
+
+    if lines:
+        messages.success(request, "；".join(lines) + "。")
+    if problems:
+        messages.warning(request, "检查提示：" + "；".join(problems[:5]))
+
+    # 分配完成后顺手刷新主观榜，教师无需再点一次
+    if lines:
+        for task in targets:
+            try:
+                leaderboard.refresh_subjective(task)
+            except Exception:  # noqa: BLE001 - 没有投票时排序为空是正常的
+                logger.exception("refresh_subjective failed task=%s", task.slug)
     return redirect("staff_dashboard")
 
 
@@ -630,9 +797,100 @@ def staff_allocate(request: HttpRequest):
 @require_POST
 def staff_refresh_subjective(request: HttpRequest):
     config = load_config()
-    task = get_task(config.peer_review.task)
-    count = leaderboard.refresh_subjective(task)
-    messages.success(request, f"已重新拟合 Bradley–Terry 模型，更新 {count} 条主观排名。")
+    updated = []
+    for task in config.review_tasks():
+        count = leaderboard.refresh_subjective(task)
+        updated.append(f"{task.short_name} {count} 条")
+    if updated:
+        messages.success(request, "已重新拟合 Bradley–Terry 模型，更新 " + "、".join(updated) + "。")
+    else:
+        messages.error(request, "配置中没有开放互评的任务。")
+    return redirect("staff_dashboard")
+
+
+@staff_member_required
+@require_POST
+def staff_settings(request: HttpRequest):
+    """教师面板的参数设置：互评份数与注册策略。"""
+    config = load_config()
+    setting = AppSetting.get()
+    section = request.POST.get("section")
+
+    if section == "review":
+        counts: Dict[str, int] = {}
+        for task in config.review_tasks():
+            raw = request.POST.get(f"count_{task.slug}")
+            if raw is None or raw == "":
+                continue
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                messages.error(request, f"{task.name}的份数必须是整数。")
+                return redirect("staff_dashboard")
+            if value < 0 or value > 200:
+                messages.error(request, f"{task.name}的份数需在 0–200 之间。")
+                return redirect("staff_dashboard")
+            counts[task.slug] = value
+        setting.review_counts = counts
+        setting.save(update_fields=["review_counts", "updated_at"])
+        messages.success(
+            request,
+            "评价份数已保存：" + "、".join(
+                f"{t.short_name} {counts.get(t.slug, 0)} 份" for t in config.review_tasks()
+            ) + "。修改份数后请重新分配对应任务的互评。",
+        )
+
+    elif section == "registration":
+        setting.registration_open = request.POST.get("registration_open") == "on"
+        setting.registration_code = (request.POST.get("registration_code") or "").strip()[:64]
+        setting.registration_prefix = (request.POST.get("registration_prefix") or "").strip()[:16]
+        setting.registration_require_approval = (
+            request.POST.get("registration_require_approval") == "on"
+        )
+        setting.registration_force_password_change = (
+            request.POST.get("registration_force_password_change") == "on"
+        )
+        setting.save(
+            update_fields=[
+                "registration_open",
+                "registration_code",
+                "registration_prefix",
+                "registration_require_approval",
+                "registration_force_password_change",
+                "updated_at",
+            ]
+        )
+        messages.success(
+            request,
+            "注册设置已更新："
+            + ("已开放注册" if setting.registration_open else "已关闭注册")
+            + ("，需要邀请码" if setting.registration_code else "")
+            + ("，注册后需审核" if setting.registration_require_approval else "，注册后直接可用"),
+        )
+    else:
+        messages.error(request, "未知的设置项。")
+
+    return redirect("staff_dashboard")
+
+
+@staff_member_required
+@require_POST
+def staff_registration_action(request: HttpRequest):
+    """通过 / 拒绝自助注册申请。"""
+    profile = get_object_or_404(Profile, user_id=request.POST.get("user_id") or 0)
+    action = request.POST.get("action")
+    if action == "approve":
+        profile.status = Profile.STATUS_ACTIVE
+        profile.user.is_active = True
+        profile.user.save(update_fields=["is_active"])
+        profile.save(update_fields=["status"])
+        messages.success(request, f"已通过 {profile.real_name}（{profile.student_id}）的注册申请。")
+    elif action == "reject":
+        profile.status = Profile.STATUS_REJECTED
+        profile.save(update_fields=["status"])
+        messages.warning(request, f"已拒绝 {profile.real_name}（{profile.student_id}）的注册申请。")
+    else:
+        messages.error(request, "未知操作。")
     return redirect("staff_dashboard")
 
 

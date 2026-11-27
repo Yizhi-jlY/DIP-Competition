@@ -9,61 +9,188 @@
 </div>
 
 <div class="grid grid-4">
-  <div class="card card-pad stat"><span class="label">学生账号</span><span class="value">{{ student_count }}</span></div>
-  <div class="card card-pad stat"><span class="label">最终作品</span><span class="value">{{ stats.finals|default:0 }}</span></div>
-  <div class="card card-pad stat"><span class="label">互评进度</span><span class="value">{{ stats.done|default:0 }} / {{ stats.assigned|default:0 }}</span></div>
-  <div class="card card-pad stat"><span class="label">完成率</span><span class="value">{{ stats.progress|default:0 }}%</span></div>
+  <div class="card card-pad stat"><span class="label">正常账号</span><span class="value">{{ student_count }}</span></div>
+  <div class="card card-pad stat">
+    <span class="label">待审核注册</span>
+    <span class="value">{% if reg_counts.pending %}{{ reg_counts.pending }}{% else %}0{% endif %}</span>
+  </div>
+  <div class="card card-pad stat"><span class="label">最终作品</span><span class="value">{{ final_count }}</span></div>
+  <div class="card card-pad stat"><span class="label">互评进度</span><span class="value">{{ review_totals.done }} / {{ review_totals.assigned }}</span></div>
 </div>
 
 <div class="split" style="margin-top:18px">
   <div>
     <div class="card card-pad">
-      <h3 style="margin:0 0 10px;font-size:16px">互评管理</h3>
-      <p class="small muted">
-        分配任务时要求所有去色作品已确认为最终作品，互评阶段开始后作品自动冻结。
-        重新分配会清除已有投票记录，请谨慎操作。
+      <h3 style="margin:0 0 6px;font-size:16px">匿名互评 · 份数与分配</h3>
+      <p class="small muted" style="margin:0 0 12px">
+        两个任务分别分配、分别排名。「每人份数」是该任务每位学生要完成的评价数量，保存后需要重新分配才会生效；
+        重新分配会清除该任务已有的投票记录。
       </p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-        <form method="post" action="{% url 'staff_allocate' %}" onsubmit="return confirm('确认（重新）分配互评任务？已有投票将被清除。');">
+
+      <form method="post" action="{% url 'staff_settings' %}">
+        {% csrf_token %}
+        <input type="hidden" name="section" value="review">
+        <div class="table-wrap">
+          <table class="data" style="min-width:0">
+            <thead>
+              <tr>
+                <th>任务</th><th class="num">最终作品</th><th class="num">每人份数</th>
+                <th class="num">已分配</th><th class="num">已投票</th><th class="num">进度</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in review_rows %}
+              <tr>
+                <td>
+                  <strong>{{ r.task.name }}</strong>
+                  <div class="small muted">{{ r.task.tagline }}</div>
+                </td>
+                <td class="num">{{ r.stats.finals }}</td>
+                <td class="num">
+                  <input class="input small mono" type="number" name="count_{{ r.task.slug }}"
+                         value="{{ r.count }}" min="0" max="200" step="1" style="width:88px"
+                         aria-label="{{ r.task.name }}每人份数">
+                </td>
+                <td class="num">{{ r.stats.assigned }}</td>
+                <td class="num">{{ r.stats.done }}</td>
+                <td class="num">{{ r.stats.progress }}%</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="6" class="empty">配置中没有开放互评的任务。</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button class="btn small" type="submit" style="margin-top:12px">保存评价份数</button>
+      </form>
+
+      <div class="action-row">
+        {% for r in review_rows %}
+        <form method="post" action="{% url 'staff_allocate' %}"
+              onsubmit="return confirm('重新分配「{{ r.task.name }}」的互评任务？该任务已有的投票会被清除。');">
           {% csrf_token %}
-          <button class="btn small" type="submit">生成 / 重新分配互评任务</button>
+          <input type="hidden" name="task" value="{{ r.task.slug }}">
+          <button class="btn ghost small" type="submit">分配「{{ r.task.short_name }}」</button>
+        </form>
+        {% endfor %}
+        <form method="post" action="{% url 'staff_allocate' %}"
+              onsubmit="return confirm('重新分配两个任务的互评任务？所有已有投票都会被清除。');">
+          {% csrf_token %}
+          <input type="hidden" name="task" value="all">
+          <button class="btn small" type="submit">全部分配</button>
         </form>
         <form method="post" action="{% url 'staff_refresh_subjective' %}">
           {% csrf_token %}
           <button class="btn ghost small" type="submit">重新拟合 Bradley–Terry</button>
         </form>
-        <a class="btn ghost small" href="{% url 'leaderboard' %}?board=decolor-subjective">查看主观榜</a>
+        <a class="btn ghost small" href="{% url 'leaderboard' %}?board=denoise-subjective">去噪主观榜</a>
+        <a class="btn ghost small" href="{% url 'leaderboard' %}?board=decolor-subjective">去色主观榜</a>
       </div>
 
-      {% if stats.per_image %}
-      <table class="data" style="margin-top:16px;min-width:0">
-        <thead><tr><th>原图</th><th class="num">作品</th><th class="num">比较次数</th><th class="num">最少</th><th class="num">最多</th><th class="num">零覆盖</th></tr></thead>
-        <tbody>
-          {% for key, s in stats.per_image.items %}
-          <tr>
-            <td class="mono">{{ key }}</td>
-            <td class="num">{{ s.entries }}</td>
-            <td class="num">{{ s.comparisons }}</td>
-            <td class="num">{{ s.min }}</td>
-            <td class="num">{{ s.max }}</td>
-            <td class="num">{% if s.uncovered %}<span class="badge danger">{{ s.uncovered }}</span>{% else %}0{% endif %}</td>
-          </tr>
+      {% if review_rows %}
+      <div class="grid grid-2" style="margin-top:14px">
+        {% for r in review_rows %}
+        <div class="small muted">
+          <strong>{{ r.task.short_name }}</strong>：每张图平均被评
+          {% for key, s in r.stats.per_image.items %}
+            {{ key }} {{ s.min }}–{{ s.max }} 次{% if not forloop.last %}、{% endif %}
           {% endfor %}
-        </tbody>
-      </table>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card card-pad">
+      <h3 style="margin:0 0 6px;font-size:16px">学生注册</h3>
+      <p class="small muted" style="margin:0 0 12px">
+        开放后学生可在 <a href="{% url 'register' %}" target="_blank">注册页</a> 用学号自建账号；
+        参赛编号自动顺延。邀请码、学号前缀与审核策略都可以随时调整。
+      </p>
+
+      <form method="post" action="{% url 'staff_settings' %}">
+        {% csrf_token %}
+        <input type="hidden" name="section" value="registration">
+        <div class="check-row">
+          <label class="check">
+            <input type="checkbox" name="registration_open" {% if setting.registration_open %}checked{% endif %}>
+            <span>开放自助注册</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="registration_require_approval" {% if setting.registration_require_approval %}checked{% endif %}>
+            <span>注册后需教师审核</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="registration_force_password_change" {% if setting.registration_force_password_change %}checked{% endif %}>
+            <span>注册后强制改密</span>
+          </label>
+        </div>
+        <div class="grid grid-2" style="margin-top:14px">
+          <div class="field" style="margin:0">
+            <label for="reg-code">注册邀请码（留空＝不需要）</label>
+            <input class="input" id="reg-code" name="registration_code" maxlength="64"
+                   value="{{ setting.registration_code }}" placeholder="例如 DIP2026">
+          </div>
+          <div class="field" style="margin:0">
+            <label for="reg-prefix">学号前缀限制（留空＝不限制）</label>
+            <input class="input" id="reg-prefix" name="registration_prefix" maxlength="16"
+                   value="{{ setting.registration_prefix }}" placeholder="例如 52">
+          </div>
+        </div>
+        <button class="btn small" type="submit" style="margin-top:14px">保存注册设置</button>
+      </form>
+
+      <div class="small muted" style="margin-top:12px">
+        正常 {{ reg_counts.active }} 人 · 待审核 {{ reg_counts.pending }} 人 · 已拒绝 {{ reg_counts.rejected }} 人
+      </div>
+
+      {% if pending_profiles %}
+      <div class="table-wrap" style="margin-top:12px">
+        <table class="data" style="min-width:0">
+          <thead>
+            <tr><th>学号</th><th>姓名</th><th>参赛编号</th><th>注册时间</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            {% for p in pending_profiles %}
+            <tr>
+              <td class="mono">{{ p.student_id }}</td>
+              <td>{{ p.real_name }}</td>
+              <td class="mono">{{ p.contest_code }}</td>
+              <td class="mono small">{{ p.imported_at|date:"m-d H:i" }}</td>
+              <td>
+                <div class="action-row">
+                  <form method="post" action="{% url 'staff_registration_action' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="user_id" value="{{ p.user_id }}">
+                    <input type="hidden" name="action" value="approve">
+                    <button class="btn small" type="submit">通过</button>
+                  </form>
+                  <form method="post" action="{% url 'staff_registration_action' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="user_id" value="{{ p.user_id }}">
+                    <input type="hidden" name="action" value="reject">
+                    <button class="btn ghost small" type="submit">拒绝</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
       {% endif %}
     </div>
 
     <div class="card card-pad">
       <h3 style="margin:0 0 10px;font-size:16px">成绩与作品导出</h3>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="action-row">
         <a class="btn small" href="{% url 'export_scores' %}">导出成绩 CSV</a>
         <a class="btn ghost small" href="{% url 'export_submissions' %}">打包最终作品 ZIP</a>
         <a class="btn ghost small" href="{% url 'staff_gallery' %}">作品讲评</a>
         <a class="btn ghost small" href="/admin/" target="_blank">进入管理后台</a>
       </div>
       <p class="small muted" style="margin:10px 0 0">
-        成绩 CSV 含去噪 PSNR/SSIM、去色 CCPR/CCFR/E-score、主观分、名次与综合参考分；
+        成绩 CSV 含账号状态、去噪 PSNR/SSIM/主观分、去色 CCPR/CCFR/E-score/主观分、名次与综合参考分；
         ZIP 按 任务/原图/参赛编号.png 组织，并附 manifest.csv。
       </p>
     </div>

@@ -7,7 +7,7 @@ competition:
   intro: >
     本次测试包含两个任务：图像去噪与图像去色。学生只需在本地运行自己的算法，
     将结果图像上传到本平台，服务器自动计算客观指标并更新排行榜；
-    去色任务在截止后额外进行匿名两两比较的主观评价。
+    两个任务在截止后都会组织匿名两两比较的主观评价。
   rules:
     - 每个任务提供两张输入图像，需分别提交两张同尺寸结果图。
     - 去噪任务提交 8-bit RGB PNG（3 通道）；去色任务提交 8-bit 灰度 PNG（1 通道）。
@@ -16,7 +16,7 @@ competition:
       默认选中该图排名指标（PSNR / E-score）最高的一次，确认后记录图像、文件名与提交时间。
     - 禁止直接使用他人结果或公开的参考图；去色任务不得直接复制 CADIK 主页上已有算法的结果。
     - 截止后作品冻结，进入匿名互评阶段；互评阶段不可再修改作品。
-    - 互评采用两两比较，不显示作者、算法名与客观指标，左右位置随机。
+    - 互评采用两两比较，不显示作者、算法名与客观指标，左右位置随机；两个任务分别进行。
   data_note: >
     去噪任务的参考图来自 SIDD（Smartphone Image Denoising Dataset），
     去色任务图像来自 Čadík 等人在 2008 年公布的 color-to-gray 评测数据集。
@@ -43,6 +43,9 @@ tasks:
     max_submissions: 0   # 0 = 不限提交次数
     ranking_metric: psnr
     tiebreak_metric: ssim
+    review_hint: 评价依据：噪声残留是否明显、纹理与细节是否保留、边缘有没有被过度抹平、是否出现伪影或色偏。
+    review_input_label: 含噪输入图
+    review_result_label: 去噪结果
     images:
       - key: D01
         label: 图 1 · 真实噪声
@@ -86,6 +89,9 @@ tasks:
     max_submissions: 0   # 0 = 不限提交次数
     ranking_metric: escore
     tiebreak_metric: ccpr
+    review_hint: 评价依据：原本可区分的颜色在灰度中是否仍能区分、细节是否保留、对比度是否合理、整体是否自然、有无明显伪影。
+    review_input_label: 彩色原图
+    review_result_label: 灰度结果
     images:
       - key: C01
         label: 图 1 · 图形与色块
@@ -129,8 +135,7 @@ metrics_options:
 
 peer_review:
   enabled: true
-  task: decolor
-  comparisons_per_student: 10
+  comparisons_per_student: 10   # 默认份数，可被下面的 tasks 或教师面板覆盖
   allow_tie: true
   random_swap: true
   exclude_own_submission: true
@@ -138,6 +143,14 @@ peer_review:
   ranking_method: bradley_terry
   tie_weight: 0.5
   regularization: 1.0
+  # 每个任务单独设置匿名互评；comparisons_per_student 表示每位学生在该任务上要评价的份数
+  tasks:
+    denoise:
+      enabled: true
+      comparisons_per_student: 8
+    decolor:
+      enabled: true
+      comparisons_per_student: 10
 
 scoring:
   # 去色综合分 Q = 100 * (w_obj * E_norm + w_subj * R)

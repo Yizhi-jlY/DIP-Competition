@@ -1,4 +1,4 @@
-"""互评任务分配与投票。"""
+"""互评任务分配与投票（两个任务各自独立分配、独立排名）。"""
 from __future__ import annotations
 
 import logging
@@ -8,11 +8,28 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 
-from competition.config import TaskSpec, load_config
+from competition.config import Config, TaskSpec, load_config
 from competition.models import AppSetting, Comparison, ReviewAssignment, Submission
 from competition.peer_review import allocation
 
 logger = logging.getLogger(__name__)
+
+
+def review_tasks(config: Optional[Config] = None) -> List[TaskSpec]:
+    """已开放匿名互评的任务列表。"""
+    return (config or load_config()).review_tasks()
+
+
+def effective_count(task: TaskSpec, config: Optional[Config] = None) -> int:
+    """该任务每人需要评价的份数：教师面板设置优先，其次 yaml。"""
+    config = config or load_config()
+    raw = (AppSetting.get().review_counts or {}).get(task.slug)
+    if raw is None:
+        raw = config.peer_review.for_task(task.slug).comparisons_per_student
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return config.peer_review.for_task(task.slug).comparisons_per_student
 
 
 def _finals_by_image(task: TaskSpec) -> Dict[str, List[Submission]]:
@@ -33,13 +50,14 @@ def allocate_reviews(
     seed: int = 2026,
     replace: bool = True,
 ) -> dict:
-    config = load_config()
-    per_student = per_student or config.peer_review.comparisons_per_student
+    per_student = effective_count(task) if per_student is None else per_student
+    if per_student <= 0:
+        raise ValueError(f"{task.name}的每人评价份数为 0，请先在教师面板中设置。")
     finals = _finals_by_image(task)
 
     entries_by_image = {k: [s.id for s in v] for k, v in finals.items() if len(v) >= 2}
     if not entries_by_image:
-        raise ValueError("没有足够的最终作品，无法分配互评任务。")
+        raise ValueError(f"{task.name}没有足够的最终作品，无法分配互评任务。")
 
     own_map: Dict[int, Dict[str, int]] = {}
     reviewers: List[Tuple[str, Dict[str, int]]] = []
@@ -102,6 +120,8 @@ def allocate_reviews(
     setting.save(update_fields=["reviews_allocated_at", "updated_at"])
 
     summary = {
+        "task": task.slug,
+        "task_name": task.name,
         "assignments": len(to_create),
         "reviewers": len(reviewers),
         "per_student": per_student,
@@ -118,6 +138,24 @@ def progress_for(user: User, task: TaskSpec) -> Tuple[int, int]:
     total = qs.count()
     done = Comparison.objects.filter(assignment__reviewer=user, assignment__task=task.slug).count()
     return done, total
+
+
+def progress_all(user: User, config: Optional[Config] = None) -> List[dict]:
+    """每个互评任务的完成情况，供首页与互评页展示。"""
+    rows: List[dict] = []
+    for task in review_tasks(config):
+        done, total = progress_for(user, task)
+        rows.append(
+            {
+                "task": task,
+                "done": done,
+                "total": total,
+                "percent": round(done / total * 100) if total else 0,
+                "remaining": max(0, total - done),
+                "finished": total > 0 and done >= total,
+            }
+        )
+    return rows
 
 
 def next_assignment(user: User, task: TaskSpec) -> Optional[ReviewAssignment]:

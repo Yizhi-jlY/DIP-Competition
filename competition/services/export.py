@@ -72,6 +72,9 @@ def score_rows() -> List[Dict[str, str]]:
                 decolor_metrics[row.student.id] = {"mean": None, "tie": None}
 
     subj = {r.student.id: r for r in leaderboard.subjective_rows(decolor)} if decolor else {}
+    subj_denoise = (
+        {r.student.id: r for r in leaderboard.subjective_rows(denoise)} if denoise else {}
+    )
 
     finals: Dict[int, Dict[str, Submission]] = {}
     for sub in Submission.objects.filter(is_final=True, is_baseline=False).select_related("student"):
@@ -85,6 +88,7 @@ def score_rows() -> List[Dict[str, str]]:
             "学号": profile.student_id,
             "姓名": profile.real_name,
             "参赛编号": profile.contest_code,
+            "状态": profile.get_status_display(),
         }
         if denoise:
             means_psnr, means_ssim = [], []
@@ -103,6 +107,9 @@ def score_rows() -> List[Dict[str, str]]:
             row["去噪平均PSNR"] = _fmt(dm.get("mean"), 2)
             row["去噪平均SSIM"] = _fmt(dm.get("tie"), 4)
             row["去噪名次"] = str(obj_rank.get(student.id, ""))
+            sd = subj_denoise.get(student.id)
+            row["去噪主观得分"] = _fmt(sd.score if sd else None, 2)
+            row["去噪主观名次"] = str(sd.rank if sd else "")
 
         if decolor:
             for img in decolor.images:
@@ -118,8 +125,8 @@ def score_rows() -> List[Dict[str, str]]:
             row["去色平均CCPR"] = _fmt(dm.get("tie"), 4)
             row["去色客观名次"] = str(decolor_rank.get(student.id, ""))
             sr = subj.get(student.id)
-            row["主观得分"] = _fmt(sr.score if sr else None, 2)
-            row["主观名次"] = str(sr.rank if sr else "")
+            row["去色主观得分"] = _fmt(sr.score if sr else None, 2)
+            row["去色主观名次"] = str(sr.rank if sr else "")
             if sr and dm.get("mean") is not None:
                 w_obj = config.scoring.weight_objective
                 w_subj = config.scoring.weight_subjective

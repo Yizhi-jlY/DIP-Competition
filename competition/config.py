@@ -49,6 +49,9 @@ class TaskSpec:
     description: str
     icon: str = "◆"
     tagline: str = ""
+    review_hint: str = ""
+    review_input_label: str = "原始输入图"
+    review_result_label: str = "结果图"
     channels: int = 3
     color_mode: str = "RGB"
     file_format: str = "PNG"
@@ -129,9 +132,17 @@ class Schedule:
 
 
 @dataclass(frozen=True)
+class TaskReviewSpec:
+    """单个任务的互评设置。"""
+
+    enabled: bool = True
+    comparisons_per_student: int = 10
+
+
+@dataclass(frozen=True)
 class PeerReviewSpec:
     enabled: bool = True
-    task: str = "decolor"
+    task: str = "decolor"  # 旧版单任务配置的兼容字段
     comparisons_per_student: int = 10
     allow_tie: bool = True
     random_swap: bool = True
@@ -140,6 +151,24 @@ class PeerReviewSpec:
     ranking_method: str = "bradley_terry"
     tie_weight: float = 0.5
     regularization: float = 1.0
+    tasks: Dict[str, TaskReviewSpec] = field(default_factory=dict)
+
+    def for_task(self, slug: str) -> TaskReviewSpec:
+        """返回某任务的互评设置；未单独配置的任务默认不开放互评。"""
+        if slug in self.tasks:
+            spec = self.tasks[slug]
+            return TaskReviewSpec(
+                enabled=self.enabled and spec.enabled,
+                comparisons_per_student=spec.comparisons_per_student,
+            )
+        if not self.tasks and slug == self.task:
+            return TaskReviewSpec(self.enabled, self.comparisons_per_student)
+        return TaskReviewSpec(False, self.comparisons_per_student)
+
+    def enabled_task_slugs(self) -> List[str]:
+        if self.tasks:
+            return [slug for slug, spec in self.tasks.items() if self.enabled and spec.enabled]
+        return [self.task] if self.enabled else []
 
 
 @dataclass(frozen=True)
@@ -176,6 +205,15 @@ class Config:
 
     def task_map(self) -> Dict[str, TaskSpec]:
         return {t.slug: t for t in self.tasks}
+
+    def review_tasks(self) -> List["TaskSpec"]:
+        """已开放匿名互评的任务（按 yaml 中的配置顺序）。"""
+        out: List[TaskSpec] = []
+        for slug in self.peer_review.enabled_task_slugs():
+            task = self.task(slug)
+            if task is not None:
+                out.append(task)
+        return out
 
 
 def _dt(value: Any, tz: ZoneInfo) -> Optional[datetime]:
@@ -223,6 +261,9 @@ def _parse(raw: Dict[str, Any]) -> Config:
                 description=item.get("description", ""),
                 icon=item.get("icon", "◆"),
                 tagline=item.get("tagline", ""),
+                review_hint=item.get("review_hint", ""),
+                review_input_label=item.get("review_input_label", "原始输入图"),
+                review_result_label=item.get("review_result_label", "结果图"),
                 channels=int(item.get("channels", 3)),
                 color_mode=item.get("color_mode", "RGB"),
                 file_format=item.get("file_format", "PNG"),
@@ -245,10 +286,20 @@ def _parse(raw: Dict[str, Any]) -> Config:
     )
 
     pr_raw = raw.get("peer_review", {}) or {}
+    default_count = int(pr_raw.get("comparisons_per_student", 10) or 0)
+    review_tasks: Dict[str, TaskReviewSpec] = {}
+    for slug, value in (pr_raw.get("tasks", {}) or {}).items():
+        if isinstance(value, bool):
+            review_tasks[str(slug)] = TaskReviewSpec(enabled=value, comparisons_per_student=default_count)
+        elif isinstance(value, dict):
+            review_tasks[str(slug)] = TaskReviewSpec(
+                enabled=bool(value.get("enabled", True)),
+                comparisons_per_student=int(value.get("comparisons_per_student", default_count) or 0),
+            )
     peer_review = PeerReviewSpec(
         enabled=bool(pr_raw.get("enabled", True)),
         task=pr_raw.get("task", "decolor"),
-        comparisons_per_student=int(pr_raw.get("comparisons_per_student", 10)),
+        comparisons_per_student=default_count,
         allow_tie=bool(pr_raw.get("allow_tie", True)),
         random_swap=bool(pr_raw.get("random_swap", True)),
         exclude_own_submission=bool(pr_raw.get("exclude_own_submission", True)),
@@ -256,6 +307,7 @@ def _parse(raw: Dict[str, Any]) -> Config:
         ranking_method=pr_raw.get("ranking_method", "bradley_terry"),
         tie_weight=float(pr_raw.get("tie_weight", 0.5)),
         regularization=float(pr_raw.get("regularization", 1.0)),
+        tasks=review_tasks,
     )
 
     sc_raw = raw.get("scoring", {}) or {}

@@ -42,6 +42,13 @@
       <button class="btn block" type="submit">登录</button>
     </form>
 
+    {% if registration_open %}
+    <p class="small" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      还没有账号？<a href="{% url 'register' %}">用学号注册</a>
+      <span class="muted">（是否开放注册、是否需要邀请码由教师设置）</span>
+    </p>
+    {% endif %}
+
     <p class="small muted" style="margin-top:18px">
       提交结果图像，服务器自动评测并生成排行榜。
     </p>

@@ -5,9 +5,9 @@
 <div class="review-head">
   <div>
     <div class="eyebrow">匿名互评 · {{ task.name }}</div>
-    <h1 style="margin:0">请选择更合理的灰度转换结果</h1>
+    <h1 style="margin:0">请选择更合理的{{ task.review_result_label }}</h1>
     <p class="muted small" style="margin:6px 0 0">
-      第 {{ done|add:1 }} / {{ total }} 题 · 原图 {{ assignment.image_key }} · 不显示作者、算法与客观指标
+      第 {{ done|add:1 }} / {{ total }} 题 · {{ task.review_input_label }} {{ assignment.image_key }} · 不显示作者、算法与客观指标
     </p>
   </div>
   <div style="min-width:180px">
@@ -18,12 +18,14 @@
   </div>
 </div>
 
+{% include "_review_tabs.html" %}
+
 <div class="review-original" style="margin-top:18px">
-  <img src="{{ original_url }}" alt="彩色原图">
+  <img src="{{ original_url }}" alt="{{ task.review_input_label }}">
   <div>
-    <h3 style="margin:0 0 4px;font-size:16px">彩色原图</h3>
+    <h3 style="margin:0 0 4px;font-size:16px">{{ task.review_input_label }}</h3>
     <p class="small muted" style="margin:0">
-      评价依据：颜色区域是否仍可区分、细节是否保留、对比度是否合理、整体是否自然、有无明显伪影。
+      {{ task.review_hint|default:"评价依据：细节是否保留、对比度是否合理、整体是否自然、有无明显伪影。" }}
       两张结果在页面上的左右位置是随机的。
     </p>
   </div>
@@ -39,14 +41,14 @@
       <img src="{{ left_url }}" alt="结果 A">
       <div class="caption">
         <strong>结果 A</strong>
-        <span class="small muted">灰度结果</span>
+        <span class="small muted">{{ task.review_result_label }}</span>
       </div>
     </div>
     <div class="result-panel">
       <img src="{{ right_url }}" alt="结果 B">
       <div class="caption">
         <strong>结果 B</strong>
-        <span class="small muted">灰度结果</span>
+        <span class="small muted">{{ task.review_result_label }}</span>
       </div>
     </div>
   </div>

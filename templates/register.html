@@ -1,0 +1,77 @@
+{% load static %}<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="color-scheme" content="light">
+  <title>注册 · {{ brand.title }}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <div class="auth-brand">
+      <span class="brand-mark">DIP</span>
+      <strong>{{ brand.title }}</strong>
+    </div>
+
+    {% if not open %}
+      <h1>注册暂未开放</h1>
+      <p class="sub">教师尚未开放自助注册。请等待通知，或使用教师下发的账号直接登录。</p>
+      <a class="btn block" href="{% url 'login' %}">返回登录</a>
+    {% else %}
+      <h1>用学号注册</h1>
+      <p class="sub">
+        使用本人学号注册，姓名仅教师可见，排行榜只显示匿名参赛编号。
+        {% if setting.registration_require_approval %}注册后需要教师审核通过才能登录。{% endif %}
+      </p>
+
+      {% if form.non_field_errors %}
+        <div class="alert error">{{ form.non_field_errors|join:" " }}</div>
+      {% endif %}
+      {% if messages %}
+        {% for message in messages %}<div class="alert {{ message.tags }}">{{ message }}</div>{% endfor %}
+      {% endif %}
+
+      <form method="post" action="{% url 'register' %}">
+        {% csrf_token %}
+        <div class="field">
+          <label for="{{ form.student_id.id_for_label }}">{{ form.student_id.label }}</label>
+          {{ form.student_id }}
+          {% if form.student_id.errors %}<div class="errorlist">{{ form.student_id.errors|join:" " }}</div>{% endif %}
+        </div>
+        <div class="field">
+          <label for="{{ form.real_name.id_for_label }}">{{ form.real_name.label }}</label>
+          {{ form.real_name }}
+          {% if form.real_name.errors %}<div class="errorlist">{{ form.real_name.errors|join:" " }}</div>{% endif %}
+        </div>
+        {% if require_code %}
+        <div class="field">
+          <label for="{{ form.registration_code.id_for_label }}">{{ form.registration_code.label }}</label>
+          {{ form.registration_code }}
+          {% if form.registration_code.errors %}<div class="errorlist">{{ form.registration_code.errors|join:" " }}</div>{% endif %}
+        </div>
+        {% endif %}
+        <div class="field">
+          <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
+          {{ form.password1 }}
+          {% if form.password1.errors %}<div class="errorlist">{{ form.password1.errors|join:" " }}</div>{% endif %}
+        </div>
+        <div class="field">
+          <label for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>
+          {{ form.password2 }}
+          {% if form.password2.errors %}<div class="errorlist">{{ form.password2.errors|join:" " }}</div>{% endif %}
+        </div>
+        <button class="btn block" type="submit">提交注册</button>
+      </form>
+
+      <p class="small muted" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+        已经注册？<a href="{% url 'login' %}">返回登录</a>
+      </p>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

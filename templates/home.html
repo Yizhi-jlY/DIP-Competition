@@ -92,22 +92,30 @@
         <h3 style="margin:0;font-size:16px">匿名互评</h3>
         <span class="badge accent">{{ review_done }} / {{ review_total }}</span>
       </div>
-      <p class="small muted" style="margin:8px 0 10px">
-        针对同一彩色原图，比较两位同学的两张灰度结果。不显示姓名、算法与客观指标，左右位置随机。
+      <p class="small muted" style="margin:8px 0 4px">
+        两个任务分别进行匿名两两比较，不显示姓名、算法与客观指标，左右位置随机。
       </p>
-      <div class="progress" style="margin-bottom:12px">
-        <i style="width:{% if review_total %}{% widthratio review_done review_total 100 %}{% else %}0{% endif %}%"></i>
+      {% for p in review_progress %}
+      <div style="margin-top:10px">
+        <div class="small" style="display:flex;justify-content:space-between;gap:8px">
+          <span>{{ p.task.name }}</span>
+          <span class="mono">{{ p.done }} / {{ p.total }}</span>
+        </div>
+        <div class="progress" style="margin-top:4px"><i style="width:{{ p.percent }}%"></i></div>
       </div>
-      <a class="btn ghost block small" href="{% url 'review' %}">进入互评</a>
+      {% empty %}
+      <p class="small muted" style="margin:10px 0 0">教师暂未开放互评。</p>
+      {% endfor %}
+      <a class="btn ghost block small" href="{% url 'review' %}" style="margin-top:14px">进入互评</a>
     </div>
 
     <div class="card card-pad">
       <h3 style="margin:0 0 8px;font-size:16px">榜单说明</h3>
       <p class="small muted" style="margin:0 0 8px">
-        去噪以平均 PSNR 排名、SSIM 作同分依据；去色客观榜以平均 E-score 排名；
-        去色主观榜使用 Bradley–Terry 偏好模型，由全班两两比较拟合得到。
+        去噪榜以平均 PSNR 排名、SSIM 作同分依据；去色客观榜以平均 E-score 排名；
+        两个任务各有一张主观榜，均由 Bradley–Terry 偏好模型对全班匿名两两比较拟合得到。
       </p>
-      <a class="small" href="{% url 'leaderboard' %}">查看三类排行榜 →</a>
+      <a class="small" href="{% url 'leaderboard' %}">查看四类排行榜 →</a>
     </div>
   </aside>
 </div>

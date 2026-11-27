@@ -4,33 +4,72 @@
 {% block content %}
 <div class="page-head">
   <div class="eyebrow">匿名互评</div>
-  <h1>{% if not_open %}互评尚未开始{% elif finished %}你已完成全部互评{% else %}互评暂未开放{% endif %}</h1>
+  <h1>
+    {% if not enabled %}平台暂未开放匿名互评
+    {% elif not_open %}互评尚未开始
+    {% elif finished %}{% if all_done %}你已完成全部互评{% elif total %}「{{ task.name }}」的互评已做完{% else %}「{{ task.name }}」暂无你的互评任务{% endif %}
+    {% else %}互评暂未开放{% endif %}
+  </h1>
   <p>
-    {% if not_open %}
+    {% if not enabled %}
+      教师尚未启用匿名互评。
+    {% elif not_open %}
       当前阶段为「{{ phase.label }}」。互评将在 {{ schedule.review_open|date:"Y-m-d H:i" }} 开放，届时请回到本页完成两两比较。
+      两个任务分别互评，题目数量由教师在教师面板中设置。
     {% elif finished %}
-      感谢参与！你的 {{ done }} 次比较已记录，主观排名将在互评截止后公布。
+      {% if all_done %}
+        感谢参与！两个任务的比较都已完成，主观排名会在互评截止后公布。
+      {% elif total %}
+        本任务已完成 {{ done }} 次比较。{% if next_pending %}「{{ next_pending.task.short_name }}」还有 {{ next_pending.remaining }} 份待评。{% endif %}
+      {% else %}
+        教师还没有为这个任务分配互评任务，或你在这个任务上没有最终作品。可以先去另一个任务看看。
+      {% endif %}
     {% else %}
       平台暂未开放匿名互评。
     {% endif %}
   </p>
 </div>
 
-<div class="grid grid-3">
-  <div class="card card-pad stat"><span class="label">已完成</span><span class="value">{{ done }} / {{ total }}</span></div>
-  <div class="card card-pad stat"><span class="label">互评进度</span><span class="value">{% if total %}{% widthratio done total 100 %}%{% else %}—{% endif %}</span></div>
-  <div class="card card-pad stat"><span class="label">当前阶段</span><span class="value" style="font-size:16px">{{ phase.label|default:"—" }}</span></div>
-</div>
+{% if enabled %}{% include "_review_tabs.html" %}{% endif %}
 
-<div class="card card-pad" style="margin-top:18px">
+{% if enabled %}
+{% if review_tasks %}
+<div class="grid grid-2" style="margin-bottom:18px">
+  {% for r in review_tasks %}
+  <div class="card card-pad">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <strong>{{ r.task.name }}</strong>
+      <span class="badge {% if r.finished %}success{% elif r.total %}accent{% endif %}">{{ r.done }} / {{ r.total }}</span>
+    </div>
+    <div class="progress" style="margin:10px 0 12px"><i style="width:{{ r.percent }}%"></i></div>
+    {% if r.total %}
+      <a class="btn ghost small" href="{% url 'review' %}?task={{ r.task.slug }}">
+        {% if r.finished %}查看完成情况{% else %}继续评价{% endif %}
+      </a>
+    {% else %}
+      <span class="small muted">暂未分配互评任务</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card card-pad">
   <h3 style="margin:0 0 8px;font-size:16px">互评如何进行</h3>
   <ul class="rules small">
-    <li>每次只比较同一张彩色原图的两张匿名灰度结果，选择更合理的一张。</li>
+    <li>两个任务分别互评：去噪比较同一张含噪图的两份去噪结果，去色比较同一张彩色原图的两份灰度结果。</li>
     <li>左右位置随机，不显示姓名、学号、算法名称与客观指标。</li>
-    <li>每人需完成 {{ total|default:site.peer_review.comparisons_per_student }} 次比较，两张原图平均分配。</li>
+    <li>每个任务需要完成多少份，由教师在教师面板中按任务设置。</li>
     <li>不会出现自己的作品，也不会重复评价同一对图像。</li>
-    <li>结果用 Bradley–Terry 偏好模型汇总为 0–100 的主观分。</li>
+    <li>结果用 Bradley–Terry 偏好模型汇总为 0–100 的主观分，两个任务各自排名。</li>
   </ul>
-  <a class="btn ghost small" href="{% url 'leaderboard' %}?board=decolor-subjective">查看主观排行榜</a>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    {% if next_pending %}
+      <a class="btn small" href="{% url 'review' %}?task={{ next_pending.task.slug }}">继续评价「{{ next_pending.task.short_name }}」</a>
+    {% endif %}
+    <a class="btn ghost small" href="{% url 'leaderboard' %}?board=denoise-subjective">查看去噪主观榜</a>
+    <a class="btn ghost small" href="{% url 'leaderboard' %}?board=decolor-subjective">查看去色主观榜</a>
+  </div>
 </div>
+{% endif %}
 {% endblock %}

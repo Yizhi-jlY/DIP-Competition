@@ -1117,6 +1117,39 @@ main > *:nth-child(3) { animation-delay: 80ms; }
 }
 
 /* ==========================================================================
+   教师面板：注册设置与操作按钮组
+   ========================================================================== */
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  accent-color: var(--accent);
+}
+.action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+}
+.action-row form { margin: 0; }
+.review-tabs a .small { margin-left: 6px; font-variant-numeric: tabular-nums; }
+table.data td .action-row { margin-top: 0; }
+
+/* ==========================================================================
    打印：教师可直接打印成绩单
    ========================================================================== */
 @media print {

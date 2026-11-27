@@ -20,9 +20,11 @@ def site_context(request):
     pending = 0
     user = getattr(request, "user", None)
     if user is not None and user.is_authenticated and config.peer_review.enabled:
-        pending = ReviewAssignment.objects.filter(
-            reviewer=user, task=config.peer_review.task, comparison__isnull=True
-        ).count()
+        slugs = config.peer_review.enabled_task_slugs()
+        if slugs:
+            pending = ReviewAssignment.objects.filter(
+                reviewer=user, task__in=slugs, comparison__isnull=True
+            ).count()
 
     return {
         "site": config,

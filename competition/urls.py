@@ -11,6 +11,7 @@ from competition.views import (
 urlpatterns = [
     path("", views.home, name="home"),
     path("login/", CompetitionLoginView.as_view(), name="login"),
+    path("register/", views.register_view, name="register"),
     path("logout/", CompetitionLogoutView.as_view(), name="logout"),
     path("password/", CompetitionPasswordChangeView.as_view(), name="password_change"),
     path("task/<slug:slug>/", views.task_detail, name="task_detail"),
@@ -30,6 +31,8 @@ urlpatterns = [
     path("staff/", views.staff_dashboard, name="staff_dashboard"),
     path("staff/gallery/", views.staff_gallery, name="staff_gallery"),
     path("staff/allocate/", views.staff_allocate, name="staff_allocate"),
+    path("staff/settings/", views.staff_settings, name="staff_settings"),
+    path("staff/registration/", views.staff_registration_action, name="staff_registration_action"),
     path("staff/subjective/", views.staff_refresh_subjective, name="staff_refresh_subjective"),
     path("export/scores.csv", views.export_scores, name="export_scores"),
     path("export/submissions.zip", views.export_submissions, name="export_submissions"),

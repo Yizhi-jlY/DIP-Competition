@@ -1,0 +1,10 @@
+{% if review_tasks %}
+<div class="tabs review-tabs" style="margin-bottom:16px">
+  {% for r in review_tasks %}
+  <a href="{% url 'review' %}?task={{ r.task.slug }}" class="{% if r.task.slug == task.slug %}active{% endif %}">
+    {{ r.task.short_name }}
+    <span class="small muted">{{ r.done }}/{{ r.total }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}

@@ -91,7 +91,7 @@ def _color_image(size=64, seed=0):
 
 
 class Workspace:
-    def __init__(self, max_submissions: int = 2):
+    def __init__(self, max_submissions: int = 2, review_tasks: dict | None = None):
         self.root = Path(tempfile.mkdtemp(prefix="dip-test-"))
         for rel in ("data/public/denoise", "data/public/decolor",
                     "data/private/ground_truth", "storage", "config"):
@@ -111,6 +111,13 @@ class Workspace:
                 for task in CONFIG_TEMPLATE["tasks"]
             ],
         }
+        if review_tasks is not None:
+            config["peer_review"] = {
+                **CONFIG_TEMPLATE["peer_review"],
+                "comparisons_per_student": 2,
+                "tasks": review_tasks,
+            }
+            config["peer_review"].pop("task", None)
         self.config_path = self.root / "config/competition.yaml"
         self.config_path.write_text(
             yaml.safe_dump(config, allow_unicode=True), encoding="utf-8"

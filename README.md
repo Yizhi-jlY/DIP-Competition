@@ -58,7 +58,16 @@ DIP-Competition/
 ├── web/                      # settings / urls / wsgi
 ├── competition/
 │   ├── models.py             # Profile / Submission / ReviewAssignment / Comparison ...
-│   ├── views.py  urls.py  forms.py  admin.py
+│   ├── views/                # 页面，按使用者分模块（见下表）
+│   │   ├── auth.py           #   登录 / 登出 / 改密 / 自助注册
+│   │   ├── student.py        #   首页 / 任务页 / 确认最终提交 / 我的提交
+│   │   ├── leaderboard.py    #   客观榜 / 主观榜 / 综合主观榜
+│   │   ├── review.py         #   互评出题与投票
+│   │   ├── files.py          #   输入图、结果图、互评图、下载
+│   │   ├── staff.py          #   教师总览 / 分配互评 / 重拟合 / 设置 / 导出
+│   │   ├── base.py           #   渲染、文件响应、缩略图缓存（内部复用）
+│   │   └── system.py         #   /healthz 探活
+│   ├── urls.py  forms.py  admin.py
 │   ├── config.py             # yaml 加载与缓存
 │   ├── research/             # ★ 学术层：教师组改这里（详见 research/README.md）
 │   │   ├── params.py         #   唯一的参数默认值：τ、σ、SSIM 窗口、采样种子

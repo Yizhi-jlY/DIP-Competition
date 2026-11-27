@@ -48,6 +48,23 @@ class SubjectiveRow:
     rank: Optional[int] = None
 
 
+@dataclass
+class CombinedRow:
+    """两个任务主观榜的综合行：综合分 = 加权平均，缺一项则 score 为 None。"""
+
+    code: str
+    name: str
+    student: Optional[User]
+    score: Optional[float] = None
+    denoise_score: Optional[float] = None
+    denoise_rank: Optional[int] = None
+    decolor_score: Optional[float] = None
+    decolor_rank: Optional[int] = None
+    comparisons: int = 0
+    rank: Optional[int] = None
+    missing: List[str] = field(default_factory=list)
+
+
 def _mean(values: Sequence[Optional[float]]) -> Optional[float]:
     clean = [v for v in values if v is not None]
     if not clean:
@@ -230,6 +247,79 @@ def composite_rows(task: TaskSpec):
             q = 100.0 * (w_obj * e + w_subj * r)
         out.append({"row": row, "subjective": subj_row, "q": q})
     return out, w_obj, w_subj
+
+
+def combined_subjective_rows():
+    """两个任务各自 BT 拟合后，合成一张综合主观榜。
+
+    综合分 = w_denoise × 去噪主观分 + w_decolor × 去色主观分（权重来自 yaml，自动归一化）。
+    两个任务都有主观分的学生才参与排名；只完成一项的放在「未纳入」，避免半张成绩
+    被当成完整成绩和别人比。
+    """
+    config = load_config()
+    weights = config.scoring.combined_weights()
+    denoise = config.task("denoise")
+    decolor = config.task("decolor")
+
+    d_rows = {r.student.id: r for r in subjective_rows(denoise) if r.student} if denoise else {}
+    c_rows = {r.student.id: r for r in subjective_rows(decolor) if r.student} if decolor else {}
+
+    rows: List[CombinedRow] = []
+    pending: List[CombinedRow] = []
+
+    for student_id in set(d_rows) | set(c_rows):
+        d, c = d_rows.get(student_id), c_rows.get(student_id)
+        student = (d or c).student
+        profile = getattr(student, "profile", None)
+        row = CombinedRow(
+            code=profile.contest_code if profile else student.username,
+            name=profile.real_name if profile else "",
+            student=student,
+            denoise_score=d.score if d else None,
+            denoise_rank=d.rank if d else None,
+            decolor_score=c.score if c else None,
+            decolor_rank=c.rank if c else None,
+            comparisons=(d.comparisons if d else 0) + (c.comparisons if c else 0),
+        )
+        if d and c:
+            row.score = round(
+                weights["denoise"] * d.score + weights["decolor"] * c.score, 2
+            )
+            rows.append(row)
+        else:
+            row.missing = [
+                t.short_name for t, r in ((denoise, d), (decolor, c))
+                if r is None and t is not None
+            ]
+            pending.append(row)
+
+    rows.sort(
+        key=lambda r: (
+            -(r.score or 0),
+            -min(r.denoise_score or 0, r.decolor_score or 0),
+            -r.comparisons,
+        )
+    )
+    rank = 0
+    last = None
+    for i, row in enumerate(rows, start=1):
+        if last is None or abs((row.score or 0) - last) > 1e-9:
+            rank = i
+            last = row.score
+        row.rank = rank
+
+    pending.sort(key=lambda r: r.code)
+    return rows, pending, weights
+
+
+def combined_by_student() -> Dict[int, CombinedRow]:
+    """导出/个人页用：学生 → 综合行（含未纳入者，score 为 None）。"""
+    rows, pending, _ = combined_subjective_rows()
+    out: Dict[int, CombinedRow] = {}
+    for row in rows + pending:
+        if row.student:
+            out[row.student.id] = row
+    return out
 
 
 def review_stats(task: TaskSpec) -> Dict[str, object]:

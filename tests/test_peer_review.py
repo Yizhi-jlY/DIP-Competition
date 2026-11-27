@@ -283,3 +283,79 @@ class MultiTaskReviewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "每人份数")
         self.assertContains(resp, "学生注册")
+
+    def test_combined_subjective_board(self):
+        users = self._students()
+        for i, user in enumerate(users):
+            self._denoise_sub(user, i)
+            self._decolor_sub(user, i)
+
+        setting = AppSetting.get()
+        setting.submission_close = timezone.now() - timedelta(hours=2)
+        setting.review_open = timezone.now() - timedelta(hours=1)
+        setting.review_close = timezone.now() + timedelta(days=1)
+        setting.save()
+
+        denoise, decolor = get_task("denoise"), get_task("decolor")
+        reviews.allocate_reviews(denoise, per_student=2, seed=1)
+        reviews.allocate_reviews(decolor, per_student=2, seed=2)
+        for user in users:
+            for task in (denoise, decolor):
+                for assignment in ReviewAssignment.objects.filter(reviewer=user, task=task.slug):
+                    reviews.record_vote(assignment, "left")
+
+        rows, pending, weights = leaderboard.combined_subjective_rows()
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(pending, [])
+        self.assertAlmostEqual(weights["denoise"], 0.5)
+        self.assertAlmostEqual(weights["decolor"], 0.5)
+
+        d_map = {r.student.id: r.score for r in leaderboard.subjective_rows(denoise)}
+        c_map = {r.student.id: r.score for r in leaderboard.subjective_rows(decolor)}
+        for row in rows:
+            expected = round(0.5 * d_map[row.student.id] + 0.5 * c_map[row.student.id], 2)
+            self.assertAlmostEqual(row.score, expected)
+            self.assertIsNotNone(row.denoise_rank)
+            self.assertIsNotNone(row.decolor_rank)
+        scores = [r.score for r in rows]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertEqual(rows[0].rank, 1)
+
+        # 只有单任务主观分的学生不参与综合排名
+        lone = User.objects.create_user(username="20262099", password="pass12345")
+        Profile.objects.create(
+            user=lone, student_id="20262099", real_name="单项", contest_code="S299",
+            must_change_password=False,
+        )
+        self._decolor_sub(lone, 9)
+        left = Submission.objects.filter(
+            student=users[0], task="decolor", image_key="C01"
+        ).first()
+        right = Submission.objects.filter(
+            student=lone, task="decolor", image_key="C01"
+        ).first()
+        assignment = ReviewAssignment.objects.create(
+            reviewer=lone, task="decolor", image_key="C01", left=left, right=right
+        )
+        reviews.record_vote(assignment, "left")
+
+        rows2, pending2, _ = leaderboard.combined_subjective_rows()
+        self.assertNotIn(lone.id, [r.student.id for r in rows2])
+        lone_row = next(r for r in pending2 if r.student.id == lone.id)
+        self.assertIsNone(lone_row.score)
+        self.assertEqual(lone_row.missing, ["去噪"])
+
+        # 学生与教师都能打开综合榜；页签可见
+        self.client.force_login(users[0])
+        resp = self.client.get(reverse("leaderboard") + "?board=combined")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "综合主观榜")
+        self.assertContains(resp, "综合 · 主观")
+
+    def test_combined_weights_are_normalized(self):
+        from competition.config import ScoringSpec
+
+        spec = ScoringSpec(denoise_subjective_weight=2, decolor_subjective_weight=1)
+        self.assertAlmostEqual(spec.combined_weights()["denoise"], 2 / 3)
+        zero = ScoringSpec(denoise_subjective_weight=0, decolor_subjective_weight=0)
+        self.assertEqual(zero.combined_weights(), {"denoise": 0.5, "decolor": 0.5})

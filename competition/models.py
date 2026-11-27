@@ -26,15 +26,6 @@ def submission_upload_to(instance: "Submission", filename: str) -> str:
 class Profile(models.Model):
     """学生档案：真实身份只对教师可见，排行榜只显示匿名编号。"""
 
-    STATUS_ACTIVE = "active"
-    STATUS_PENDING = "pending"
-    STATUS_REJECTED = "rejected"
-    STATUS_CHOICES = [
-        (STATUS_ACTIVE, "正常"),
-        (STATUS_PENDING, "待审核"),
-        (STATUS_REJECTED, "已拒绝"),
-    ]
-
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="profile", verbose_name="账号"
     )
@@ -43,9 +34,6 @@ class Profile(models.Model):
     contest_code = models.CharField("参赛编号", max_length=16, unique=True)
     imported_at = models.DateTimeField("导入/注册时间", auto_now_add=True)
     must_change_password = models.BooleanField("首次登录需改密", default=True)
-    status = models.CharField(
-        "账号状态", max_length=12, choices=STATUS_CHOICES, default=STATUS_ACTIVE
-    )
 
     class Meta:
         verbose_name = "学生档案"
@@ -54,10 +42,6 @@ class Profile(models.Model):
 
     def __str__(self) -> str:
         return f"{self.contest_code} {self.real_name}({self.student_id})"
-
-    @property
-    def is_approved(self) -> bool:
-        return self.status == self.STATUS_ACTIVE
 
     @property
     def display_name(self) -> str:
@@ -138,15 +122,8 @@ class AppSetting(models.Model):
     weight_subjective = models.FloatField("去色主观分权重", default=0.6)
     announcement = models.TextField("公告", blank=True)
 
-    # ---- 自助注册（教师可在线开关） ----
+    # ---- 自助注册（教师只控制开放/关闭） ----
     registration_open = models.BooleanField("开放自助注册", default=False)
-    registration_code = models.CharField("注册邀请码", max_length=64, blank=True)
-    registration_prefix = models.CharField(
-        "学号前缀限制", max_length=16, blank=True,
-        help_text="留空表示不限制；填写后学号必须以此开头",
-    )
-    registration_require_approval = models.BooleanField("注册后需教师审核", default=False)
-    registration_force_password_change = models.BooleanField("注册后强制改密", default=False)
 
     # ---- 互评份数（按任务覆盖 yaml） ----
     review_counts = models.JSONField("各任务评价份数", default=dict, blank=True)

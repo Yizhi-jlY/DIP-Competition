@@ -175,6 +175,17 @@ class PeerReviewSpec:
 class ScoringSpec:
     weight_objective: float = 0.4
     weight_subjective: float = 0.6
+    # 综合主观分 = w_denoise × 去噪主观分 + w_decolor × 去色主观分（加载时自动归一化）
+    denoise_subjective_weight: float = 0.5
+    decolor_subjective_weight: float = 0.5
+
+    def combined_weights(self) -> Dict[str, float]:
+        d = max(0.0, float(self.denoise_subjective_weight))
+        c = max(0.0, float(self.decolor_subjective_weight))
+        total = d + c
+        if total <= 0:
+            return {"denoise": 0.5, "decolor": 0.5}
+        return {"denoise": d / total, "decolor": c / total}
 
 
 @dataclass(frozen=True)
@@ -309,6 +320,8 @@ def _parse(raw: Dict[str, Any]) -> Config:
     scoring = ScoringSpec(
         weight_objective=float(sc_raw.get("weight_objective", 0.4)),
         weight_subjective=float(sc_raw.get("weight_subjective", 0.6)),
+        denoise_subjective_weight=float(sc_raw.get("denoise_subjective_weight", 0.5)),
+        decolor_subjective_weight=float(sc_raw.get("decolor_subjective_weight", 0.5)),
     )
 
     return Config(

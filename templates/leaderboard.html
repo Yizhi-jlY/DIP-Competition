@@ -9,7 +9,8 @@
   <p>
     去噪榜按两图平均 <strong>PSNR</strong>（dB）排序，PSNR 相同时比较平均 <strong>SSIM</strong>；
     去色榜按两图平均 <strong>E-score</strong> 排序，同分时比较平均 <strong>CCPR</strong>。
-    两个任务各有一张<strong>主观榜</strong>，由全班匿名两两比较的 Bradley–Terry 拟合结果排序。
+    两个任务各有一张<strong>主观榜</strong>，由全班匿名两两比较的 Bradley–Terry 拟合结果排序；
+    「综合 · 主观」把两张主观榜按权重合成一个总分。
     只有已确认的最终作品参与排名。
   </p>
 </div>
@@ -24,8 +25,67 @@
   <div class="card card-pad">
     <p class="muted" style="margin:0">教师尚未公开排行榜。提交期间可以在「我的提交」中查看自己的分数。</p>
   </div>
-{% elif not task %}
+{% elif not task and board_type != 'combined' %}
   <div class="card card-pad"><p class="muted" style="margin:0">该榜单暂无数据。</p></div>
+
+{% elif board_type == 'combined' %}
+  <div class="rule-note" style="margin:14px 0 18px">
+    <span class="rule-tag">排名依据</span>
+    <span>
+      综合主观分 = {% widthratio combined_weights.denoise 1 100 %}% × 去噪主观分 +
+      {% widthratio combined_weights.decolor 1 100 %}% × 去色主观分。
+      两个任务各自用 Bradley–Terry 独立拟合（各自 0–100 分），再按上面的权重合成；
+      只有两项都有主观分的学生参与排名，同分时看两项中较低的一项。
+    </span>
+  </div>
+
+  <div class="section-title"><h2>综合主观榜</h2><span>去噪主观 + 去色主观</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th class="rank">排名</th><th>参赛编号</th>
+          <th class="num">综合主观分<span class="th-note">排名依据</span></th>
+          <th class="num">去噪主观<span class="th-note">名次</span></th>
+          <th class="num">去色主观<span class="th-note">名次</span></th>
+          <th class="num">被比较次数</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if user.profile.contest_code == row.code %}me{% endif %}">
+          <td class="rank">{{ row.rank|medal }}</td>
+          <td class="mono">{{ row.code }}</td>
+          <td class="num mono"><strong>{{ row.score|fmt:2 }}</strong></td>
+          <td class="num mono">{{ row.denoise_score|fmt:2 }}<span class="th-note">#{{ row.denoise_rank }}</span></td>
+          <td class="num mono">{{ row.decolor_score|fmt:2 }}<span class="th-note">#{{ row.decolor_rank }}</span></td>
+          <td class="num mono">{{ row.comparisons }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="empty">还没有同时完成两个任务互评的数据。两张主观榜都生成后即可合成综合榜。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pending_rows %}
+  <div class="section-title"><h2>未纳入综合排名</h2><span>{{ pending_rows|length }} 人只有单个任务的主观分</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead><tr><th>参赛编号</th><th class="num">去噪主观</th><th class="num">去色主观</th><th>缺少</th></tr></thead>
+      <tbody>
+        {% for row in pending_rows %}
+        <tr>
+          <td class="mono">{{ row.code }}</td>
+          <td class="num mono">{% if row.denoise_score is not None %}{{ row.denoise_score|fmt:2 }}{% else %}—{% endif %}</td>
+          <td class="num mono">{% if row.decolor_score is not None %}{{ row.decolor_score|fmt:2 }}{% else %}—{% endif %}</td>
+          <td>{{ row.missing|join:"、" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 
 {% elif board_type == 'subjective' %}
   <div class="rule-note" style="margin:14px 0 18px">

@@ -45,7 +45,7 @@ class UploadForm(forms.Form):
 
 
 class RegistrationForm(forms.Form):
-    """学号 + 姓名 + 密码；邀请码由教师决定是否启用。"""
+    """学号 + 姓名 + 密码。"""
 
     student_id = forms.CharField(
         label="学号",
@@ -65,12 +65,6 @@ class RegistrationForm(forms.Form):
         max_length=64,
         widget=forms.TextInput(attrs={"class": "input", "placeholder": "请输入真实姓名"}),
     )
-    registration_code = forms.CharField(
-        label="注册码",
-        required=False,
-        max_length=64,
-        widget=forms.TextInput(attrs={"class": "input", "placeholder": "由教师提供"}),
-    )
     password1 = forms.CharField(
         label="设置密码",
         widget=forms.PasswordInput(
@@ -84,14 +78,6 @@ class RegistrationForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, require_code: bool = False, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.require_code = require_code
-        if require_code:
-            self.fields["registration_code"].required = True
-        else:
-            self.fields.pop("registration_code")
-
     def clean_student_id(self):
         try:
             return registration_service.check_student_id(self.cleaned_data["student_id"])
@@ -103,15 +89,6 @@ class RegistrationForm(forms.Form):
         if len(name) < 2:
             raise forms.ValidationError("请填写真实姓名（至少 2 个字符）。")
         return name
-
-    def clean_registration_code(self):
-        value = self.cleaned_data.get("registration_code", "")
-        if self.require_code:
-            try:
-                registration_service.check_code(value)
-            except registration_service.RegistrationError as exc:
-                raise forms.ValidationError(str(exc)) from exc
-        return value
 
     def clean(self):
         cleaned = super().clean()

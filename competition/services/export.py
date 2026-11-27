@@ -75,6 +75,7 @@ def score_rows() -> List[Dict[str, str]]:
     subj_denoise = (
         {r.student.id: r for r in leaderboard.subjective_rows(denoise)} if denoise else {}
     )
+    combined = leaderboard.combined_by_student()
 
     finals: Dict[int, Dict[str, Submission]] = {}
     for sub in Submission.objects.filter(is_final=True, is_baseline=False).select_related("student"):
@@ -88,7 +89,6 @@ def score_rows() -> List[Dict[str, str]]:
             "学号": profile.student_id,
             "姓名": profile.real_name,
             "参赛编号": profile.contest_code,
-            "状态": profile.get_status_display(),
         }
         if denoise:
             means_psnr, means_ssim = [], []
@@ -134,6 +134,14 @@ def score_rows() -> List[Dict[str, str]]:
                 row["综合参考分"] = _fmt(q, 2)
             else:
                 row["综合参考分"] = ""
+
+        cr = combined.get(student.id)
+        row["主观综合分"] = _fmt(cr.score if cr else None, 2)
+        row["主观综合名次"] = str(cr.rank) if cr and cr.rank else ""
+        if cr and cr.missing:
+            row["主观综合缺项"] = "、".join(cr.missing)
+        else:
+            row["主观综合缺项"] = ""
 
         row["去噪最终作品"] = "✓" if any(
             k.startswith("denoise:") for k in finals.get(student.id, {})

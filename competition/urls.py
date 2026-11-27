@@ -32,7 +32,6 @@ urlpatterns = [
     path("staff/gallery/", views.staff_gallery, name="staff_gallery"),
     path("staff/allocate/", views.staff_allocate, name="staff_allocate"),
     path("staff/settings/", views.staff_settings, name="staff_settings"),
-    path("staff/registration/", views.staff_registration_action, name="staff_registration_action"),
     path("staff/subjective/", views.staff_refresh_subjective, name="staff_refresh_subjective"),
     path("export/scores.csv", views.export_scores, name="export_scores"),
     path("export/submissions.zip", views.export_submissions, name="export_submissions"),

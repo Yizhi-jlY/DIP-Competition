@@ -156,3 +156,7 @@ scoring:
   # 去色综合分 Q = 100 * (w_obj * E_norm + w_subj * R)
   weight_objective: 0.4
   weight_subjective: 0.6
+  # 综合主观分：把去噪、去色两张主观榜（各自 BT 拟合，均为 0–100）合成一个总分
+  # 综合主观分 = w_denoise * 去噪主观分 + w_decolor * 去色主观分（两者自动归一化，填 1:1 即为等权平均）
+  denoise_subjective_weight: 0.5
+  decolor_subjective_weight: 0.5

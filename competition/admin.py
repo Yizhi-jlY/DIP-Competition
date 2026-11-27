@@ -50,27 +50,10 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = (
-        "contest_code", "student_id", "real_name", "status", "user", "must_change_password"
-    )
+    list_display = ("contest_code", "student_id", "real_name", "user", "must_change_password")
     search_fields = ("contest_code", "student_id", "real_name")
-    list_filter = ("status", "must_change_password")
+    list_filter = ("must_change_password",)
     ordering = ("contest_code",)
-    actions = ("approve", "reject")
-
-    @admin.action(description="通过注册申请")
-    def approve(self, request, queryset):
-        updated = queryset.exclude(status=Profile.STATUS_ACTIVE).update(
-            status=Profile.STATUS_ACTIVE
-        )
-        self.message_user(request, f"已通过 {updated} 个账号。", messages.SUCCESS)
-
-    @admin.action(description="拒绝注册申请")
-    def reject(self, request, queryset):
-        updated = queryset.exclude(status=Profile.STATUS_REJECTED).update(
-            status=Profile.STATUS_REJECTED
-        )
-        self.message_user(request, f"已拒绝 {updated} 个账号。", messages.WARNING)
 
 
 @admin.register(Submission)
@@ -183,12 +166,7 @@ class AppSettingAdmin(admin.ModelAdmin):
             "fields": ("leaderboard_public", "weight_objective", "weight_subjective")
         }),
         ("匿名互评份数（按任务覆盖 yaml）", {"fields": ("review_counts",)}),
-        ("自助注册", {
-            "fields": (
-                "registration_open", "registration_code", "registration_prefix",
-                "registration_require_approval", "registration_force_password_change",
-            )
-        }),
+        ("自助注册", {"fields": ("registration_open",)}),
         ("公告", {"fields": ("announcement",)}),
         ("系统", {"fields": ("reviews_allocated_at", "updated_at")}),
     )

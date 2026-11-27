@@ -9,13 +9,10 @@
 </div>
 
 <div class="grid grid-4">
-  <div class="card card-pad stat"><span class="label">正常账号</span><span class="value">{{ student_count }}</span></div>
-  <div class="card card-pad stat">
-    <span class="label">待审核注册</span>
-    <span class="value">{% if reg_counts.pending %}{{ reg_counts.pending }}{% else %}0{% endif %}</span>
-  </div>
+  <div class="card card-pad stat"><span class="label">学生账号</span><span class="value">{{ student_count }}</span></div>
   <div class="card card-pad stat"><span class="label">最终作品</span><span class="value">{{ final_count }}</span></div>
   <div class="card card-pad stat"><span class="label">互评进度</span><span class="value">{{ review_totals.done }} / {{ review_totals.assigned }}</span></div>
+  <div class="card card-pad stat"><span class="label">基线作品</span><span class="value">{{ baseline_count }}</span></div>
 </div>
 
 <div class="split" style="margin-top:18px">
@@ -85,6 +82,7 @@
         </form>
         <a class="btn ghost small" href="{% url 'leaderboard' %}?board=denoise-subjective">去噪主观榜</a>
         <a class="btn ghost small" href="{% url 'leaderboard' %}?board=decolor-subjective">去色主观榜</a>
+        <a class="btn ghost small" href="{% url 'leaderboard' %}?board=combined">综合主观榜</a>
       </div>
 
       {% if review_rows %}
@@ -104,8 +102,8 @@
     <div class="card card-pad">
       <h3 style="margin:0 0 6px;font-size:16px">学生注册</h3>
       <p class="small muted" style="margin:0 0 12px">
-        开放后学生可在 <a href="{% url 'register' %}" target="_blank">注册页</a> 用学号自建账号；
-        参赛编号自动顺延。邀请码、学号前缀与审核策略都可以随时调整。
+        开放后学生可在 <a href="{% url 'register' %}" target="_blank">注册页</a> 用学号自建账号，
+        参赛编号自动顺延，注册后即可直接使用。当前共有 {{ student_count }} 个账号。
       </p>
 
       <form method="post" action="{% url 'staff_settings' %}">
@@ -116,69 +114,9 @@
             <input type="checkbox" name="registration_open" {% if setting.registration_open %}checked{% endif %}>
             <span>开放自助注册</span>
           </label>
-          <label class="check">
-            <input type="checkbox" name="registration_require_approval" {% if setting.registration_require_approval %}checked{% endif %}>
-            <span>注册后需教师审核</span>
-          </label>
-          <label class="check">
-            <input type="checkbox" name="registration_force_password_change" {% if setting.registration_force_password_change %}checked{% endif %}>
-            <span>注册后强制改密</span>
-          </label>
-        </div>
-        <div class="grid grid-2" style="margin-top:14px">
-          <div class="field" style="margin:0">
-            <label for="reg-code">注册邀请码（留空＝不需要）</label>
-            <input class="input" id="reg-code" name="registration_code" maxlength="64"
-                   value="{{ setting.registration_code }}" placeholder="例如 DIP2026">
-          </div>
-          <div class="field" style="margin:0">
-            <label for="reg-prefix">学号前缀限制（留空＝不限制）</label>
-            <input class="input" id="reg-prefix" name="registration_prefix" maxlength="16"
-                   value="{{ setting.registration_prefix }}" placeholder="例如 52">
-          </div>
         </div>
         <button class="btn small" type="submit" style="margin-top:14px">保存注册设置</button>
       </form>
-
-      <div class="small muted" style="margin-top:12px">
-        正常 {{ reg_counts.active }} 人 · 待审核 {{ reg_counts.pending }} 人 · 已拒绝 {{ reg_counts.rejected }} 人
-      </div>
-
-      {% if pending_profiles %}
-      <div class="table-wrap" style="margin-top:12px">
-        <table class="data" style="min-width:0">
-          <thead>
-            <tr><th>学号</th><th>姓名</th><th>参赛编号</th><th>注册时间</th><th>操作</th></tr>
-          </thead>
-          <tbody>
-            {% for p in pending_profiles %}
-            <tr>
-              <td class="mono">{{ p.student_id }}</td>
-              <td>{{ p.real_name }}</td>
-              <td class="mono">{{ p.contest_code }}</td>
-              <td class="mono small">{{ p.imported_at|date:"m-d H:i" }}</td>
-              <td>
-                <div class="action-row">
-                  <form method="post" action="{% url 'staff_registration_action' %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="user_id" value="{{ p.user_id }}">
-                    <input type="hidden" name="action" value="approve">
-                    <button class="btn small" type="submit">通过</button>
-                  </form>
-                  <form method="post" action="{% url 'staff_registration_action' %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="user_id" value="{{ p.user_id }}">
-                    <input type="hidden" name="action" value="reject">
-                    <button class="btn ghost small" type="submit">拒绝</button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% endif %}
     </div>
 
     <div class="card card-pad">

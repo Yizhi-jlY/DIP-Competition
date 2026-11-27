@@ -57,4 +57,19 @@
   <div class="card card-pad stat"><span class="label">被比较次数</span><span class="value">{{ subjective.comparisons }}</span></div>
 </div>
 {% endif %}
+
+{% if combined %}
+<div class="section-title"><h2>我的综合主观分</h2><span>去噪 + 去色两张主观榜合成</span></div>
+{% if combined.score is not None %}
+<div class="grid grid-3">
+  <div class="card card-pad stat"><span class="label">综合主观分</span><span class="value">{{ combined.score|fmt:2 }}</span></div>
+  <div class="card card-pad stat"><span class="label">综合名次</span><span class="value">{{ combined.rank }}</span></div>
+  <div class="card card-pad stat"><span class="label">去噪 / 去色主观分</span><span class="value">{{ combined.denoise_score|fmt:1 }} / {{ combined.decolor_score|fmt:1 }}</span></div>
+</div>
+{% else %}
+<p class="small muted" style="margin:0">
+  你在「{{ combined.missing|join:"」「" }}」还没有主观分，暂不参与综合排名（需要两个任务都有互评数据）。
+</p>
+{% endif %}
+{% endif %}
 {% endblock %}

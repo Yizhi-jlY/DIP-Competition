@@ -25,7 +25,7 @@
       <h1>用学号注册</h1>
       <p class="sub">
         使用本人学号注册，姓名仅教师可见，排行榜只显示匿名参赛编号。
-        {% if setting.registration_require_approval %}注册后需要教师审核通过才能登录。{% endif %}
+        注册成功后即可直接使用，请牢记自己设置的密码。
       </p>
 
       {% if form.non_field_errors %}
@@ -47,13 +47,6 @@
           {{ form.real_name }}
           {% if form.real_name.errors %}<div class="errorlist">{{ form.real_name.errors|join:" " }}</div>{% endif %}
         </div>
-        {% if require_code %}
-        <div class="field">
-          <label for="{{ form.registration_code.id_for_label }}">{{ form.registration_code.label }}</label>
-          {{ form.registration_code }}
-          {% if form.registration_code.errors %}<div class="errorlist">{{ form.registration_code.errors|join:" " }}</div>{% endif %}
-        </div>
-        {% endif %}
         <div class="field">
           <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
           {{ form.password1 }}

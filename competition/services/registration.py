@@ -1,15 +1,12 @@
 """学号自助注册。
 
-规则全部来自教师面板的「注册设置」：
-    开放注册 / 邀请码 / 学号前缀 / 是否需要审核 / 注册后是否强制改密。
-
-注册成功即建立 User + Profile，并按现有参赛编号规则分配下一个编号；
-如果教师要求审核，账号先进入 pending，登录会被拦截，直到教师在面板中通过。
+规则只有一条：教师面板里「开放自助注册」打开后，学生即可用学号自建账号。
+注册成功即建立 User + Profile，参赛编号按现有规则顺延，账号立即可用（无需审核），
+注册时学生自己设定的密码就是登录密码，不强制改密。
 """
 from __future__ import annotations
 
 import re
-import secrets
 from typing import Optional
 
 from django.contrib.auth.models import User
@@ -49,21 +46,10 @@ def check_open(setting: Optional[AppSetting] = None) -> None:
         raise RegistrationError("当前未开放自助注册，请联系任课教师。")
 
 
-def check_code(value: str, setting: Optional[AppSetting] = None) -> None:
-    setting = setting or policy()
-    expected = (setting.registration_code or "").strip()
-    if expected and not secrets.compare_digest((value or "").strip(), expected):
-        raise RegistrationError("注册码不正确，请向教师确认。")
-
-
-def check_student_id(value: str, setting: Optional[AppSetting] = None) -> str:
-    setting = setting or policy()
+def check_student_id(value: str) -> str:
     sid = (value or "").strip()
     if not STUDENT_ID_RE.match(sid):
         raise RegistrationError("学号应为 4–20 位数字。")
-    prefix = (setting.registration_prefix or "").strip()
-    if prefix and not sid.startswith(prefix):
-        raise RegistrationError(f"本次注册的学号需要以 {prefix} 开头。")
     if Profile.objects.filter(student_id=sid).exists() or User.objects.filter(username=sid).exists():
         raise RegistrationError("该学号已注册，请直接登录；忘记密码请联系教师。")
     return sid
@@ -75,7 +61,7 @@ def register_student(
     password: str,
     setting: Optional[AppSetting] = None,
 ) -> Profile:
-    """创建账号。审核策略与强制改密由教师设置决定。"""
+    """创建账号并直接可用。"""
     setting = setting or policy()
     check_open(setting)
 
@@ -83,11 +69,6 @@ def register_student(
     if len(name) < 2:
         raise RegistrationError("请填写真实姓名（至少 2 个字符）。")
 
-    status = (
-        Profile.STATUS_PENDING
-        if setting.registration_require_approval
-        else Profile.STATUS_ACTIVE
-    )
     prefix = load_config().contest_code_prefix
 
     for _ in range(6):
@@ -101,8 +82,7 @@ def register_student(
                     student_id=student_id,
                     real_name=name,
                     contest_code=next_contest_code(prefix),
-                    status=status,
-                    must_change_password=setting.registration_force_password_change,
+                    must_change_password=False,
                 )
         except IntegrityError:
             # 并发注册可能撞到同学号或同编号，区分后重试/报错

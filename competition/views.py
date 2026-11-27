@@ -58,12 +58,6 @@ class CompetitionLoginView(LoginView):
     def form_valid(self, form):
         user = form.get_user()
         profile = getattr(user, "profile", None)
-        if profile is not None and profile.status != Profile.STATUS_ACTIVE:
-            if profile.status == Profile.STATUS_PENDING:
-                form.add_error(None, "账号正在等待教师审核，通过后即可登录。")
-            else:
-                form.add_error(None, "注册申请未通过，请联系任课教师。")
-            return self.form_invalid(form)
 
         response = super().form_valid(form)
         if profile and profile.must_change_password:
@@ -110,20 +104,16 @@ class CompetitionPasswordChangeView(PasswordChangeView):
 
 # --------------------------------------------------------------- 自助注册
 def register_view(request: HttpRequest):
-    """学生用学号自助注册；开关、邀请码、审核策略均由教师面板控制。"""
+    """学生用学号自助注册；教师面板只控制「开放/关闭」。"""
     config = load_config()
     if request.user.is_authenticated:
         return redirect("home")
 
     setting = AppSetting.get()
-    require_code = bool((setting.registration_code or "").strip())
     form = None
 
     if setting.registration_open:
-        form = RegistrationForm(
-            request.POST or None,
-            require_code=require_code,
-        )
+        form = RegistrationForm(request.POST or None)
         if request.method == "POST" and form.is_valid():
             try:
                 profile = registration_service.register_student(
@@ -135,19 +125,12 @@ def register_view(request: HttpRequest):
             except registration_service.RegistrationError as exc:
                 form.add_error(None, str(exc))
             else:
-                if profile.status == Profile.STATUS_PENDING:
-                    messages.success(
-                        request, "注册申请已提交，教师审核通过后即可用学号登录。"
-                    )
-                    return redirect("login")
                 auth_login(
                     request, profile.user, backend="django.contrib.auth.backends.ModelBackend"
                 )
                 messages.success(
                     request, f"注册成功，你的参赛编号是 {profile.contest_code}。"
                 )
-                if profile.must_change_password:
-                    return redirect("password_change")
                 return redirect("home")
 
     return render(
@@ -158,8 +141,6 @@ def register_view(request: HttpRequest):
             "tasks": config.tasks,
             "form": form,
             "open": setting.registration_open,
-            "require_code": require_code,
-            "setting": setting,
         },
         status=200 if setting.registration_open else 403,
     )
@@ -355,7 +336,7 @@ def leaderboard_view(request: HttpRequest):
     if board == "decolor-objective":  # 旧链接兼容
         board = "decolor"
     slugs = list(config.task_map())
-    valid = set(slugs) | {f"{slug}-subjective" for slug in slugs}
+    valid = set(slugs) | {f"{slug}-subjective" for slug in slugs} | {"combined"}
     if board not in valid:
         board = slugs[0] if slugs else "denoise"
 
@@ -366,6 +347,9 @@ def leaderboard_view(request: HttpRequest):
             board_tabs.append(
                 {"slug": f"{task.slug}-subjective", "label": f"{task.short_name} · 主观"}
             )
+    subjective_slugs = [t.slug for t in config.tasks if config.peer_review.for_task(t.slug).enabled]
+    if len(subjective_slugs) >= 2:
+        board_tabs.append({"slug": "combined", "label": "综合 · 主观"})
 
     ctx: Dict[str, object] = {
         "config": config,
@@ -379,7 +363,17 @@ def leaderboard_view(request: HttpRequest):
     if not allowed:
         return _base(request, "leaderboard.html", ctx)
 
-    if board.endswith("-subjective"):
+    if board == "combined":
+        rows, pending, weights = leaderboard.combined_subjective_rows()
+        ctx.update(
+            {
+                "rows": rows,
+                "pending_rows": pending,
+                "board_type": "combined",
+                "combined_weights": weights,
+            }
+        )
+    elif board.endswith("-subjective"):
         task = config.task(board[: -len("-subjective")])
         if task:
             ctx.update(
@@ -550,10 +544,17 @@ def my_submissions(request: HttpRequest):
                 subjective = row
                 break
 
+    combined_row = leaderboard.combined_by_student().get(request.user.id)
+
     return _base(
         request,
         "submissions.html",
-        {"config": config, "data": data, "subjective": subjective},
+        {
+            "config": config,
+            "data": data,
+            "subjective": subjective,
+            "combined": combined_row,
+        },
     )
 
 
@@ -670,17 +671,7 @@ def staff_dashboard(request: HttpRequest):
         "progress": round(done / assigned * 100, 1) if assigned else 0,
     }
 
-    student_count = Profile.objects.filter(status=Profile.STATUS_ACTIVE).count()
-    pending_profiles = list(
-        Profile.objects.filter(status=Profile.STATUS_PENDING)
-        .select_related("user")
-        .order_by("imported_at")
-    )
-    reg_counts = {
-        "active": student_count,
-        "pending": len(pending_profiles),
-        "rejected": Profile.objects.filter(status=Profile.STATUS_REJECTED).count(),
-    }
+    student_count = Profile.objects.count()
     baseline_count = Submission.objects.filter(is_baseline=True).count()
     final_count = Submission.objects.filter(is_final=True, is_baseline=False).count()
 
@@ -698,7 +689,7 @@ def staff_dashboard(request: HttpRequest):
         {
             "label": "学生账号可用",
             "ok": student_count > 0,
-            "detail": f"{student_count} 个正常账号，{reg_counts['pending']} 个待审核",
+            "detail": f"{student_count} 个账号",
         },
         {
             "label": "最终作品已确认",
@@ -737,8 +728,6 @@ def staff_dashboard(request: HttpRequest):
             "setting": setting,
             "review_rows": review_rows,
             "review_totals": review_totals,
-            "pending_profiles": pending_profiles,
-            "reg_counts": reg_counts,
             "student_count": student_count,
             "baseline_count": baseline_count,
             "final_count": final_count,
@@ -842,59 +831,16 @@ def staff_settings(request: HttpRequest):
 
     elif section == "registration":
         setting.registration_open = request.POST.get("registration_open") == "on"
-        setting.registration_code = (request.POST.get("registration_code") or "").strip()[:64]
-        setting.registration_prefix = (request.POST.get("registration_prefix") or "").strip()[:16]
-        setting.registration_require_approval = (
-            request.POST.get("registration_require_approval") == "on"
-        )
-        setting.registration_force_password_change = (
-            request.POST.get("registration_force_password_change") == "on"
-        )
-        setting.save(
-            update_fields=[
-                "registration_open",
-                "registration_code",
-                "registration_prefix",
-                "registration_require_approval",
-                "registration_force_password_change",
-                "updated_at",
-            ]
-        )
+        setting.save(update_fields=["registration_open", "updated_at"])
         messages.success(
             request,
-            "注册设置已更新："
-            + ("已开放注册" if setting.registration_open else "已关闭注册")
-            + ("，需要邀请码" if setting.registration_code else "")
-            + ("，注册后需审核" if setting.registration_require_approval else "，注册后直接可用"),
+            "已开放自助注册，学生可用学号在注册页自建账号。"
+            if setting.registration_open
+            else "已关闭自助注册，注册页不再接受新账号。",
         )
     else:
         messages.error(request, "未知的设置项。")
 
-    return redirect("staff_dashboard")
-
-
-@staff_member_required
-@require_POST
-def staff_registration_action(request: HttpRequest):
-    """通过 / 拒绝自助注册申请。"""
-    try:
-        user_id = int(request.POST.get("user_id") or 0)
-    except (TypeError, ValueError):
-        raise Http404("无效的账号。")
-    profile = get_object_or_404(Profile, user_id=user_id)
-    action = request.POST.get("action")
-    if action == "approve":
-        profile.status = Profile.STATUS_ACTIVE
-        profile.user.is_active = True
-        profile.user.save(update_fields=["is_active"])
-        profile.save(update_fields=["status"])
-        messages.success(request, f"已通过 {profile.real_name}（{profile.student_id}）的注册申请。")
-    elif action == "reject":
-        profile.status = Profile.STATUS_REJECTED
-        profile.save(update_fields=["status"])
-        messages.warning(request, f"已拒绝 {profile.real_name}（{profile.student_id}）的注册申请。")
-    else:
-        messages.error(request, "未知操作。")
     return redirect("staff_dashboard")
 
 

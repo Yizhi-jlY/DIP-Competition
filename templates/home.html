@@ -10,7 +10,7 @@
   </div>
   <div class="eyebrow">{{ site.subtitle }}</div>
   <h1>{{ site.title }}</h1>
-  <p>{{ site.intro }}</p>
+  <p>{{ site.intro|linebreaksbr }}</p>
   <div class="hero-meta">
     <span class="badge {% if phase.code == 'submission' %}success{% elif phase.code == 'review' %}accent{% else %}warn{% endif %} dot">{{ phase.label }}</span>
     {% if countdown %}<span>{{ phase.next_deadline_label }} {{ countdown }}</span>{% endif %}

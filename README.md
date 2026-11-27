@@ -60,8 +60,15 @@ DIP-Competition/
 │   ├── models.py             # Profile / Submission / ReviewAssignment / Comparison ...
 │   ├── views.py  urls.py  forms.py  admin.py
 │   ├── config.py             # yaml 加载与缓存
+│   ├── research/             # ★ 学术层：教师组改这里（详见 research/README.md）
+│   │   ├── params.py         #   唯一的参数默认值：τ、σ、SSIM 窗口、采样种子
+│   │   ├── degradation.py    #   退化算子：高斯加噪、纹理区裁切
+│   │   ├── dataset.py        #   每张图的输入图 / 参考图 / 退化声明解析
+│   │   ├── evaluators.py     #   任务 → 指标族（denoise / decolor）的显式映射
+│   │   ├── sources.py        #   SIDD / CADIK 原始数据的定位与配对
+│   │   └── README.md         #   改参数、换指标、换图的五步说明
 │   ├── imaging.py            # 图像校验与读写
-│   ├── metrics/denoise.py    # PSNR / SSIM
+│   ├── metrics/denoise.py    # PSNR / SSIM（数学实现）
 │   ├── metrics/decolor.py    # CCPR / CCFR / E-score（IJCV14 代码移植）
 │   ├── peer_review/allocation.py   # 互评任务分配
 │   ├── peer_review/ranking.py      # Bradley–Terry（MM 迭代）
@@ -86,6 +93,9 @@ DIP-Competition/
 
 固定 8-bit sRGB、`data_range=255`、SSIM `win_size=7`、`channel_axis=-1`，调用 `skimage.metrics`。
 不允许改尺寸、不允许自动归一化：提交图必须与输入图逐像素对齐。
+
+这两个默认值只在 `competition/research/params.py` 定义一次（`DATA_RANGE`、`SSIM_WIN_SIZE`），
+`config/competition.yaml` 的 `metrics_options` 可覆盖而不重启。
 
 ### 4.2 去色：CCPR / CCFR / E-score
 
@@ -300,10 +310,14 @@ tar czf backup-$(date +%F).tgz storage/db.sqlite3 storage/submissions data/priva
 
 ## 十一、扩展新任务（超分 / 去模糊 / 融合）
 
-1. 在 `config/competition.yaml` 增加 `tasks` 条目（图像、通道、指标、排名指标）。
-2. 把输入图放 `data/public/<slug>/`，参考图放 `data/private/ground_truth/`。
-3. 在 `competition/metrics/` 增加指标函数，并在 `services/scoring.py` 的 `evaluate_path` 中按 `channels` 或 `slug` 分派。
-4. 页面、排行榜、互评、导出无需改动。
+1. 在 `config/competition.yaml` 增加 `tasks` 条目，写清 `evaluator`（用哪套指标）、
+   `metrics`（页面显示哪些指标）、`ranking_metric`（榜单按什么排序），以及每张图的
+   `degradation`（`kind: real / gaussian / none`）。
+2. 跑 `python manage.py prepare_data` 生成输入图与参考图；跑 `run_baselines` 重建基线。
+3. 若要新的指标族：在 `competition/metrics/` 加一个模块，在
+   `competition/research/evaluators.py` 的 `evaluate()` 里加一个分支，
+   再把任务的 `evaluator` 指过去。
+4. 页面、排行榜、互评、导出无需改动 —— 它们只读 `TaskSpec` 与指标字典。
 
 ---
 

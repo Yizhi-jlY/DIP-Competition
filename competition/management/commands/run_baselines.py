@@ -17,7 +17,7 @@ from PIL import Image
 from competition.config import load_config
 from competition.imaging import load_gray_u8, load_rgb_u8, save_png
 from competition.models import Submission
-from competition.services.scoring import evaluate_path
+from competition.research.evaluators import evaluate
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ class Command(BaseCommand):
                 save_png(array, out_path)
 
                 try:
-                    metrics = evaluate_path(task, img.key, out_path)
+                    metrics = evaluate(task, img.key, out_path)
                 except Exception as exc:  # noqa: BLE001
                     self.stderr.write(f"基线 {method} 评分失败：{exc}")
                     continue

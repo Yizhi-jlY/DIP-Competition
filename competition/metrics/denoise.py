@@ -2,6 +2,10 @@
 
 实现直接调用 scikit-image，并显式固定参数（data_range、win_size、通道位置），
 保证同一份结果图在任何机器上得到完全一致的分数。
+
+参数默认值只在 `competition/research/params.py` 定义一次：
+    PSNR 峰值 DATA_RANGE，SSIM 窗口 SSIM_WIN_SIZE。
+yaml 的 metrics_options 可覆盖，见 research/evaluators.py。
 """
 from __future__ import annotations
 
@@ -12,13 +16,14 @@ import numpy as np
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 from competition.imaging import load_rgb_u8
+from competition.research import params
 
 
 def psnr_ssim(
     ground_truth: np.ndarray,
     result: np.ndarray,
-    data_range: float = 255.0,
-    ssim_win_size: int = 7,
+    data_range: float = params.DATA_RANGE,
+    ssim_win_size: int = params.SSIM_WIN_SIZE,
 ) -> Dict[str, float]:
     """输入两张同尺寸 uint8 RGB 图像，返回 psnr / ssim。"""
     if ground_truth.shape != result.shape:
@@ -55,8 +60,8 @@ def psnr_ssim(
 def evaluate_files(
     gt_path: Path | str,
     result_path: Path | str,
-    data_range: float = 255.0,
-    ssim_win_size: int = 7,
+    data_range: float = params.DATA_RANGE,
+    ssim_win_size: int = params.SSIM_WIN_SIZE,
 ) -> Dict[str, float]:
     return psnr_ssim(
         load_rgb_u8(gt_path),

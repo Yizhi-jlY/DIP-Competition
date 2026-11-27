@@ -42,6 +42,7 @@ tasks:
     color_mode: RGB
     file_format: PNG
     max_submissions: 0   # 0 = 不限提交次数
+    evaluator: denoise   # 用哪套指标：denoise = PSNR/SSIM
     ranking_metric: psnr
     tiebreak_metric: ssim
     review_hint: 评价依据：噪声残留是否明显、纹理与细节是否保留、边缘有没有被过度抹平、是否出现伪影或色偏。
@@ -51,9 +52,15 @@ tasks:
       - key: D01
         label: 图 1 · 真实噪声
         note: SIDD 手机真实噪声（sRGB）
+        # 退化声明：prepare_data 按 kind 生成这张图
+        #   real      源数据自带的含噪图，只裁切不改像素
+        #   gaussian  干净图裁切后加 Y = clip(X + N(0,σ²), 0, 255)
+        #   none      原图直接作为输入，没有参考图
+        degradation: {kind: real, source: sidd}
       - key: D02
         label: 图 2 · 合成噪声
         note: 干净图像 + 高斯噪声 σ=25/255
+        degradation: {kind: gaussian, sigma: 25, seed: 20261126, source: sidd}
     metrics:
       - key: psnr
         name: PSNR
@@ -88,6 +95,7 @@ tasks:
     color_mode: L
     file_format: PNG
     max_submissions: 0   # 0 = 不限提交次数
+    evaluator: decolor   # 用哪套指标：decolor = CCPR/CCFR/E-score
     ranking_metric: escore
     tiebreak_metric: ccpr
     review_hint: 评价依据：原本可区分的颜色在灰度中是否仍能区分、细节是否保留、对比度是否合理、整体是否自然、有无明显伪影。
@@ -97,9 +105,11 @@ tasks:
       - key: C01
         label: 图 1 · 图形与色块
         note: 人工图形，考察相近亮度颜色的可区分性
+        degradation: {kind: none, source: cadik, folder: C8TZ7768}
       - key: C02
         label: 图 2 · 自然场景
         note: 自然图像，考察细节、对比度与自然性
+        degradation: {kind: none, source: cadik, folder: fruits}
     metrics:
       - key: ccpr
         name: CCPR
@@ -124,6 +134,8 @@ tasks:
       - opencv_decolor
       - light_linear
 
+# 指标参数的覆盖项。默认值只在 competition/research/params.py 定义一次，
+# 这里写了才覆盖（改完无需重启）；不需要改就可以整段删掉。
 metrics_options:
   # PSNR / SSIM
   data_range: 255

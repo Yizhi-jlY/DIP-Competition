@@ -26,10 +26,9 @@ import numpy as np
 from skimage.color import rgb2lab
 
 from competition.imaging import load_gray_u8, load_rgb_u8
+from competition.research import params
 
-DEFAULT_TAU = 5.0
-DEFAULT_ROUNDS = 10
-DEFAULT_SEED = 20140101
+# 阈值、采样轮数、种子的默认值只在 research/params.py 定义一次
 
 _CACHE_SIZE = 8
 _cache: Dict[tuple, Dict[str, np.ndarray]] = {}
@@ -182,9 +181,9 @@ def ratios(
 def evaluate_files(
     color_path: Path | str,
     gray_path: Path | str,
-    tau: float = DEFAULT_TAU,
-    rounds: int = DEFAULT_ROUNDS,
-    seed: int = DEFAULT_SEED,
+    tau: float = params.DECOLOR_TAU,
+    rounds: int = params.DECOLOR_PAIRS_PER_PIXEL,
+    seed: int = params.DECOLOR_SEED,
 ) -> Dict[str, float]:
     color_path = Path(color_path)
     data = _cached_color(color_path, rounds, seed)
@@ -208,9 +207,9 @@ def evaluate_files(
 def evaluate_arrays(
     color_rgb_u8: np.ndarray,
     gray_u8: np.ndarray,
-    tau: float = DEFAULT_TAU,
-    rounds: int = DEFAULT_ROUNDS,
-    seed: int = DEFAULT_SEED,
+    tau: float = params.DECOLOR_TAU,
+    rounds: int = params.DECOLOR_PAIRS_PER_PIXEL,
+    seed: int = params.DECOLOR_SEED,
 ) -> Dict[str, float]:
     """便于单元测试的纯数组接口。"""
     if color_rgb_u8.shape[:2] != gray_u8.shape[:2]:
@@ -235,8 +234,8 @@ def sweep(
     color_path: Path | str,
     gray_path: Path | str,
     thresholds: Optional[np.ndarray] = None,
-    rounds: int = DEFAULT_ROUNDS,
-    seed: int = DEFAULT_SEED,
+    rounds: int = params.DECOLOR_PAIRS_PER_PIXEL,
+    seed: int = params.DECOLOR_SEED,
 ) -> list[Dict[str, float]]:
     """给出 τ=1..40 的完整曲线，便于教师课堂讲解指标随阈值的变化。"""
     thresholds = np.arange(1, 41) if thresholds is None else np.asarray(thresholds)

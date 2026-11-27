@@ -15,6 +15,8 @@ from zoneinfo import ZoneInfo
 import yaml
 from django.conf import settings
 
+from competition.research import params as research_params
+
 _lock = threading.Lock()
 _cache: Dict[str, Any] = {"key": None, "config": None}
 
@@ -36,9 +38,15 @@ class MetricSpec:
 
 @dataclass(frozen=True)
 class TaskImage:
+    """一张比赛图。后三个字段可选，省略时按约定推导路径与退化方式。"""
+
     key: str
     label: str
     note: str = ""
+    input_file: str = ""      # 相对 data/public/<任务>/ 的文件名，默认 <key>.png
+    reference_file: str = ""  # 相对 data/private/ground_truth/ 的文件名，默认 <key>.png
+    # 退化声明，供 `manage.py prepare_data` 用，例如 {"kind": "gaussian", "sigma": 25}
+    degradation: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -56,6 +64,9 @@ class TaskSpec:
     color_mode: str = "RGB"
     file_format: str = "PNG"
     max_submissions: int = 0  # 0 或负数表示不限制提交次数
+    # 用哪套客观指标：denoise（PSNR/SSIM）或 decolor（CCPR/CCFR/E-score）。
+    # 留空时按 channels 推断，保持对旧配置的兼容。
+    evaluator: str = ""
     ranking_metric: str = ""
     tiebreak_metric: str = ""
     images: tuple[TaskImage, ...] = ()
@@ -72,11 +83,27 @@ class TaskSpec:
     def ground_truth_dir(self) -> Path:
         return Path(settings.BASE_DIR) / "data" / "private" / "ground_truth"
 
+    def image_spec(self, key: str) -> Optional["TaskImage"]:
+        for img in self.images:
+            if img.key == key:
+                return img
+        return None
+
     def public_image(self, key: str) -> Path:
-        return self.public_dir / f"{key}.png"
+        spec = self.image_spec(key)
+        name = spec.input_file if spec and spec.input_file else f"{key}.png"
+        return self.public_dir / name
 
     def ground_truth(self, key: str) -> Path:
-        return self.ground_truth_dir / f"{key}.png"
+        spec = self.image_spec(key)
+        name = spec.reference_file if spec and spec.reference_file else f"{key}.png"
+        return self.ground_truth_dir / name
+
+    def evaluator_kind(self) -> str:
+        """该任务使用的指标族；未显式声明时按通道数推断。"""
+        if self.evaluator:
+            return self.evaluator.strip().lower()
+        return "denoise" if self.channels == 3 else "decolor"
 
     def metric(self, key: str) -> Optional[MetricSpec]:
         for m in self.metrics:
@@ -110,7 +137,7 @@ class TaskSpec:
         return all(self.public_image(img.key).exists() for img in self.images)
 
     def reference_ready(self) -> bool:
-        if self.channels == 1:
+        if self.evaluator_kind() != "denoise":
             return True
         return all(self.ground_truth(img.key).exists() for img in self.images)
 
@@ -256,6 +283,9 @@ def _parse(raw: Dict[str, Any]) -> Config:
                 key=i["key"],
                 label=i.get("label", i["key"]),
                 note=i.get("note", ""),
+                input_file=i.get("input", "") or "",
+                reference_file=i.get("reference", "") or "",
+                degradation=dict(i.get("degradation", {}) or {}),
             )
             for i in item.get("images", []) or []
         )
@@ -274,6 +304,7 @@ def _parse(raw: Dict[str, Any]) -> Config:
                 color_mode=item.get("color_mode", "RGB"),
                 file_format=item.get("file_format", "PNG"),
                 max_submissions=int(item.get("max_submissions", 0) or 0),
+                evaluator=item.get("evaluator", "") or "",
                 ranking_metric=item.get("ranking_metric", ""),
                 tiebreak_metric=item.get("tiebreak_metric", ""),
                 images=images,
@@ -324,6 +355,10 @@ def _parse(raw: Dict[str, Any]) -> Config:
         decolor_subjective_weight=float(sc_raw.get("decolor_subjective_weight", 0.5)),
     )
 
+    # 学术参数：默认值只在 research/params.py 定义一次，yaml 写了就覆盖
+    metric_options = research_params.metric_options()
+    metric_options.update(dict(raw.get("metrics_options", {}) or {}))
+
     return Config(
         title=comp.get("title", "数字图像处理课程竞赛平台"),
         subtitle=comp.get("subtitle", ""),
@@ -337,7 +372,7 @@ def _parse(raw: Dict[str, Any]) -> Config:
         tasks=tuple(tasks),
         peer_review=peer_review,
         scoring=scoring,
-        metrics_options=dict(raw.get("metrics_options", {}) or {}),
+        metrics_options=metric_options,
     )
 
 

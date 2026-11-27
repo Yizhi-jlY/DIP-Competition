@@ -27,7 +27,7 @@
       <div class="image-card">
         <div class="thumb">
           {% if img.exists %}
-            <img src="{{ img.url }}" alt="{{ img.spec.label }}">
+            <img src="{{ img.url }}?w=thumb" alt="{{ img.spec.label }}" width="640" height="640" decoding="async">
           {% else %}
             <span class="muted small">输入图尚未准备</span>
           {% endif %}

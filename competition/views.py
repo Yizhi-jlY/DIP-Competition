@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from django.contrib import messages
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
@@ -449,14 +451,39 @@ def my_submissions(request: HttpRequest):
 
 
 # --------------------------------------------------------------- 文件服务
-def _file_response(path: Path, filename: Optional[str] = None) -> FileResponse:
+def _file_response(path: Path, filename: Optional[str] = None, cache: str = "private, max-age=300") -> FileResponse:
     if not path.exists():
         raise Http404("文件不存在。")
     resp = FileResponse(open(path, "rb"), content_type="image/png")
     if filename:
         resp["Content-Disposition"] = f'inline; filename="{filename}"'
-    resp["Cache-Control"] = "private, max-age=300"
+    resp["Cache-Control"] = cache
     return resp
+
+
+def _thumbnail(src: Path, width: int = 640) -> Path:
+    """按需生成缩略图并落盘缓存。
+
+    输入图是 768×768 的无损 PNG（约 1.3–1.5 MB），140 人同时刷新任务页会重复下载
+    近 400 MB。页面上改用 640px 缩略图（约 150 KB），"下载输入图"仍给原图。
+    """
+    from PIL import Image
+
+    try:
+        rel = src.resolve().relative_to((settings.BASE_DIR / "data").resolve())
+    except ValueError:
+        return src
+    dst = settings.BASE_DIR / "storage" / "thumbs" / rel.parent / f"{src.stem}_{width}.png"
+    if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+        return dst
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(f".{os.getpid()}.tmp")
+    with Image.open(src) as im:
+        im = im.convert("RGB") if im.mode not in ("L", "RGB") else im
+        im.thumbnail((width, width), Image.LANCZOS)
+        im.save(tmp, format="PNG", optimize=True)
+    tmp.replace(dst)  # 原子替换，避免并发下读到半张图
+    return dst
 
 
 @login_required
@@ -464,7 +491,11 @@ def public_image(request: HttpRequest, slug: str, key: str):
     task = get_task(slug)
     if key not in {img.key for img in task.images}:
         raise Http404
-    return _file_response(task.public_image(key))
+    path = task.public_image(key)
+    if request.GET.get("w") == "thumb":
+        path = _thumbnail(path, 640)
+    # 输入图在赛程内不会变化，允许浏览器长缓存，避免反复下载
+    return _file_response(path, cache="private, max-age=86400")
 
 
 @login_required

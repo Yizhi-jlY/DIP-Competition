@@ -30,7 +30,7 @@
       {% for img in section.task.images %}
         {% with sub=card.subs|get_item:img.key %}
         <div class="image-card">
-          <div class="thumb" style="min-height:140px">
+          <div class="thumb" style="height:172px">
             {% if sub %}<img src="{% url 'submission_image' sub.pk %}" alt="{{ img.key }}">{% endif %}
           </div>
           <div class="body">

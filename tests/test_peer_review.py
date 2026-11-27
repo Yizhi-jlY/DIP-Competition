@@ -467,6 +467,9 @@ class ObjectiveRankingTests(TestCase):
         self.assertContains(resp, "S200")
         self.assertContains(resp, "学生0")
 
+        resp = self.client.get(reverse("admin:competition_subjectiveranking_changelist"))
+        self.assertEqual(resp.status_code, 200)
+
         admin_obj = ObjectiveRankingAdmin(ObjectiveRanking, None)
         request = RequestFactory().get("/")
         request.user = staff

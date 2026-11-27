@@ -149,15 +149,32 @@ class ComparisonAdmin(admin.ModelAdmin):
     search_fields = ("assignment__reviewer__username",)
 
 
+class RankingAdminMixin:
+    """两张排名快照共用：显示参赛编号与姓名，而不是登录名。"""
+
+    @admin.display(description="参赛编号")
+    def code(self, obj):
+        profile = getattr(obj.student, "profile", None)
+        return profile.contest_code if profile else obj.student_id
+
+    @admin.display(description="姓名")
+    def name(self, obj):
+        profile = getattr(obj.student, "profile", None)
+        return profile.real_name if profile else "—"
+
+
 @admin.register(SubjectiveRanking)
-class SubjectiveRankingAdmin(admin.ModelAdmin):
-    list_display = ("rank", "student", "task", "score", "comparisons", "computed_at")
+class SubjectiveRankingAdmin(RankingAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "task", "rank", "code", "name", "score", "comparisons", "computed_at",
+    )
     list_filter = ("task",)
-    ordering = ("rank",)
+    # 按任务分组再按名次排，避免两个任务的名次交错（1,1,2,2…）
+    ordering = ("task", "rank")
 
 
 @admin.register(ObjectiveRanking)
-class ObjectiveRankingAdmin(admin.ModelAdmin):
+class ObjectiveRankingAdmin(RankingAdminMixin, admin.ModelAdmin):
     """按指标算出的客观排名（排行榜页面实时计算，这里是最近一次快照）。"""
 
     list_display = (
@@ -174,16 +191,6 @@ class ObjectiveRankingAdmin(admin.ModelAdmin):
     readonly_fields = (
         "student", "task", "metric", "score", "tiebreak", "per_image", "rank", "computed_at",
     )
-
-    @admin.display(description="参赛编号")
-    def code(self, obj):
-        profile = getattr(obj.student, "profile", None)
-        return profile.contest_code if profile else obj.student_id
-
-    @admin.display(description="姓名")
-    def name(self, obj):
-        profile = getattr(obj.student, "profile", None)
-        return profile.real_name if profile else "—"
 
     @admin.display(description="排名指标均值", ordering="score")
     def score_display(self, obj):

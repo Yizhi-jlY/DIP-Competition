@@ -877,7 +877,11 @@ def staff_settings(request: HttpRequest):
 @require_POST
 def staff_registration_action(request: HttpRequest):
     """通过 / 拒绝自助注册申请。"""
-    profile = get_object_or_404(Profile, user_id=request.POST.get("user_id") or 0)
+    try:
+        user_id = int(request.POST.get("user_id") or 0)
+    except (TypeError, ValueError):
+        raise Http404("无效的账号。")
+    profile = get_object_or_404(Profile, user_id=user_id)
     action = request.POST.get("action")
     if action == "approve":
         profile.status = Profile.STATUS_ACTIVE

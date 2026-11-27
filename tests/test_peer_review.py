@@ -380,7 +380,7 @@ class ObjectiveRankingTests(TestCase):
         cls.ws.cleanup()
         super().tearDownClass()
 
-    def _make_students(self, task, count=4):
+    def _make_students(self, task, count=4, final=True):
         base = np.asarray(Image.open(task.public_image("D01")).convert("RGB"))
         rng = np.random.default_rng(3)
         users = []
@@ -396,7 +396,7 @@ class ObjectiveRankingTests(TestCase):
                 base.astype(np.float32) + rng.normal(0, i * 6, base.shape), 0, 255
             ).astype(np.uint8)
             sub = Submission(
-                student=user, task=task.slug, image_key="D01", is_final=True,
+                student=user, task=task.slug, image_key="D01", is_final=final,
                 width=noisy.shape[1], height=noisy.shape[0], channels=3,
             )
             sub.file.save(
@@ -432,6 +432,21 @@ class ObjectiveRankingTests(TestCase):
         # 重复重算不会产生重复行
         leaderboard.refresh_objective(task)
         self.assertEqual(ObjectiveRanking.objects.filter(task="denoise").count(), len(users))
+
+    def test_confirm_final_refreshes_snapshot_on_commit(self):
+        """学生确认最终作品后，客观排名快照要跟着更新（事务提交后才重算）。"""
+        from competition.services.submissions import confirm_final
+
+        task = get_task("denoise")
+        users = self._make_students(task, count=2, final=False)
+        self.assertEqual(ObjectiveRanking.objects.count(), 0)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            confirm_final(users[0], task)
+
+        saved = ObjectiveRanking.objects.filter(task="denoise")
+        self.assertEqual(saved.count(), 1)
+        self.assertEqual(saved.first().student_id, users[0].id)
 
     def test_admin_lists_snapshot_readonly(self):
         from django.test import RequestFactory

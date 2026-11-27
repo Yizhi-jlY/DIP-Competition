@@ -276,7 +276,7 @@ tar czf backup-$(date +%F).tgz storage/db.sqlite3 storage/submissions data/priva
 
 覆盖：PSNR 与解析解一致、SSIM 对模糊敏感、常量灰度得 0 分、指标可复现；
 尺寸/通道/格式校验、次数上限、最终作品唯一性、越权访问被拒；
-互评分配硬约束、Bradley–Terry 传递性、完整互评到排名的链路。
+互评分配硬约束、Bradley–Terry 传递性、完整互评到排名的链路、两张主观榜合成为综合分。
 
 ---
 

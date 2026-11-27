@@ -219,6 +219,7 @@ def task_detail(request: HttpRequest, slug: str):
             "images_ctx": images_ctx,
             "confirm_ctx": confirm_ctx,
             "confirmed_any": bool(finals),
+            "confirm_has_pool": any(row["pool"] for row in confirm_ctx),
             "all_confirmed": len(finals) == len(task.images),
             "history": history,
             "metric_specs": task.metrics,

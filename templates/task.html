@@ -142,8 +142,10 @@
               {% endif %}
             </div>
           {% endfor %}
-          <button class="btn block small" type="submit" style="margin-top:4px">确认以上作品为最终提交</button>
-          <p class="help" style="margin:8px 0 0">截止前可继续提交并重新确认，以最后一次确认为准。</p>
+          <button class="btn block small" type="submit" style="margin-top:4px"{% if not confirm_has_pool %} disabled{% endif %}>确认以上作品为最终提交</button>
+          <p class="help" style="margin:8px 0 0">
+            {% if confirm_has_pool %}截止前可继续提交并重新确认，以最后一次确认为准。{% else %}需要先为每张图至少上传一次，才能确认最终作品。{% endif %}
+          </p>
         </form>
       {% else %}
         <p class="small muted" style="margin:0">当前阶段已截止，最终作品不可再修改。</p>

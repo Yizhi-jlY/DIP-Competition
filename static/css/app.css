@@ -80,6 +80,9 @@ body {
 
 ::selection { background: #d7e3fd; color: #0b1220; }
 
+/* 中文换行：避免最后一行只剩一两个字（孤立行） */
+p { text-wrap: pretty; }
+
 a {
   color: var(--accent);
   text-decoration: none;

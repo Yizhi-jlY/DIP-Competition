@@ -831,58 +831,161 @@ table.data.compact th { font-size: 10px; letter-spacing: 0.06em; }
   flex-wrap: wrap;
 }
 .review-head h1 { font-size: 23px; letter-spacing: -0.02em; }
+.review-progress { min-width: 180px; flex: none; }
 
+/* 互评主体：单栏、居中、阅读宽度收敛，避免宽屏下比较区被拉散 */
+.review-page {
+  max-width: 880px;
+  margin: 0 auto;
+}
+.review-form {
+  margin: 0 auto;
+  padding: 0 0 8px;
+}
+
+/* ---- 原图：标题居中 + 浅灰相框 ---- */
 .review-original {
+  margin: 20px 0 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 22px;
-  align-items: center;
-  padding: 16px 18px;
-  background: var(--surface-2);
+  gap: 10px;
+  justify-items: center;
+}
+.review-original figcaption {
+  font-size: 13.5px;
+  color: var(--text-2);
+  letter-spacing: 0.01em;
+}
+.review-original-frame {
+  width: fit-content;
+  max-width: 100%;
+  padding: 14px;
+  display: flex;
+  justify-content: center;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
 }
-.review-original img {
-  border-radius: 6px;
-  max-height: 220px;
+.review-original-frame img {
   width: auto;
-  box-shadow: var(--shadow-sm);
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 4px;
 }
 
-.review-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+/* ---- 两份结果 ---- */
+.review-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 16px;
+}
 
 .result-panel {
+  display: block;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface);
+  cursor: pointer;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 .result-panel:hover { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31, 79, 216, 0.08); }
+.result-panel .result-frame { display: block; background: var(--surface-3); }
 .result-panel img {
   width: 100%;
-  height: 320px;
+  height: 260px;
   object-fit: contain;
-  background: #fff;
+  background: transparent;
 }
 .result-panel .caption {
-  padding: 10px 14px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: block;
+  padding: 11px 14px;
+  text-align: center;
+  font-weight: 650;
+  font-size: 14px;
+  color: var(--text);
   border-top: 1px solid var(--border);
   background: var(--surface-2);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.result-panel .caption strong { font-family: var(--font-mono); font-size: 13px; }
+.result-panel.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(31, 79, 216, 0.12);
+}
+.result-panel.is-selected .caption { background: var(--accent-soft); color: var(--accent); }
 
-.vote-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
-.vote-row .btn { min-height: 50px; font-size: 15px; }
-.vote-sub { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
-.rubric {
+/* ---- 问题 + 单选列表 ---- */
+.review-question {
+  margin: 26px 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.choice-list { display: grid; gap: 2px; }
+
+.choice-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.choice-item:hover { background: var(--surface-3); }
+.choice-item input[type="radio"] {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.choice-item .choice-key {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
   color: var(--muted);
-  font-size: 12.5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 1.6;
+}
+.choice-item:has(input:checked) {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.choice-item:has(input:checked) .choice-key { border-color: var(--accent-line); color: var(--accent); }
+
+/* ---- 评价依据：浅灰提示块 ---- */
+.rubric {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
   margin-top: 16px;
-  text-align: center;
+}
+.review-actions .btn {
+  min-width: 220px;
+  min-height: 48px;
+  font-size: 15px;
 }
 
 /* ==========================================================================
@@ -1064,7 +1167,6 @@ main > *:nth-child(3) { animation-delay: 80ms; }
 
 @media (max-width: 920px) {
   .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .review-original { grid-template-columns: 200px minmax(0, 1fr); }
   .brand-text small { display: none; }
 }
 
@@ -1072,9 +1174,7 @@ main > *:nth-child(3) { animation-delay: 80ms; }
   .container { padding: 0 18px; }
   main { padding: 22px 0 48px; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-  .review-pair { grid-template-columns: 1fr; }
-  .review-original { grid-template-columns: 1fr; }
-  .review-original img { max-height: 200px; }
+  .review-page { max-width: none; }
 
   .hero { padding: 26px 22px 24px; }
   .hero h1 { font-size: 25px; }
@@ -1094,7 +1194,13 @@ main > *:nth-child(3) { animation-delay: 80ms; }
   .topbar-right { padding-bottom: 10px; }
   .user-chip span { display: none; }
 
-  .result-panel img { height: 240px; }
+  /* 互评在手机上仍保持左右并排，方便对照；只压缩高度 */
+  .review-pair { gap: 10px; margin-top: 12px; }
+  .result-panel img { height: 190px; }
+  .review-original-frame { padding: 10px; }
+  .review-original-frame img { max-height: 220px; }
+  .review-question { margin-top: 20px; font-size: 15px; }
+  .review-actions .btn { width: 100%; min-width: 0; }
   table.data { min-width: 560px; }
   .table-wrap {
     background:
@@ -1103,9 +1209,11 @@ main > *:nth-child(3) { animation-delay: 80ms; }
 }
 
 @media (max-width: 480px) {
-  .vote-row, .vote-sub { grid-template-columns: 1fr; }
   .hero-actions .btn { width: 100%; }
   .auth-card { padding: 26px 22px; }
+  .result-panel img { height: 150px; }
+  .choice-item { padding: 11px 8px; }
+  .choice-item .choice-key { display: none; }
 }
 
 /* 触摸设备：保证 44px 目标 */

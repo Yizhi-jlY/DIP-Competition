@@ -269,6 +269,10 @@ class MultiTaskReviewTests(TestCase):
         self.assertContains(resp, "结果 A")
         self.assertContains(resp, "结果 B")
         self.assertContains(resp, "去噪")
+        # 版式：图片在上、单选列表在下（radio 而非按钮直接提交）
+        self.assertContains(resp, 'name="choice"')
+        self.assertContains(resp, 'type="radio"')
+        self.assertContains(resp, "请选择更合理的")
 
         resp = self.client.get(reverse("review") + "?task=decolor")
         self.assertEqual(resp.status_code, 200)

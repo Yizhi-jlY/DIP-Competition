@@ -2,15 +2,16 @@
 {% block title %}匿名互评 · {{ site.title }}{% endblock %}
 
 {% block content %}
+<div class="review-page">
 <div class="review-head">
   <div>
-    <div class="eyebrow">匿名互评 · {{ task.name }}</div>
-    <h1 style="margin:0">请选择更合理的{{ task.review_result_label }}</h1>
-    <p class="muted small" style="margin:6px 0 0">
-      第 {{ done|add:1 }} / {{ total }} 题 · {{ task.review_input_label }} {{ assignment.image_key }} · 不显示作者、算法与客观指标
+    <div class="eyebrow">{{ task.name }} · 第 {{ done|add:1 }} / {{ total }} 题</div>
+    <h1>匿名互评</h1>
+    <p class="small muted" style="margin:6px 0 0">
+      不显示作者、算法与客观指标；两张结果的左右位置随机。
     </p>
   </div>
-  <div style="min-width:180px">
+  <div class="review-progress">
     <div class="small muted" style="display:flex;justify-content:space-between">
       <span>进度</span><span>{{ done }} / {{ total }}</span>
     </div>
@@ -20,73 +21,104 @@
 
 {% include "_review_tabs.html" %}
 
-<div class="review-original" style="margin-top:18px">
-  <img src="{{ original_url }}" alt="{{ task.review_input_label }}">
-  <div>
-    <h3 style="margin:0 0 4px;font-size:16px">{{ task.review_input_label }}</h3>
-    <p class="small muted" style="margin:0">
-      {{ task.review_hint|default:"评价依据：细节是否保留、对比度是否合理、整体是否自然、有无明显伪影。" }}
-      两张结果在页面上的左右位置是随机的。
-    </p>
-  </div>
-</div>
-
-<form method="post" action="{% url 'review_vote' assignment.id %}" id="voteForm">
+<form method="post" action="{% url 'review_vote' assignment.id %}" id="voteForm" class="review-form">
   {% csrf_token %}
   <input type="hidden" name="duration_ms" id="durationInput" value="0">
-  <input type="hidden" name="choice" id="choiceInput" value="">
+
+  <figure class="review-original">
+    <figcaption>{{ task.review_input_label }}</figcaption>
+    <div class="review-original-frame">
+      <img src="{{ original_url }}" alt="{{ task.review_input_label }}">
+    </div>
+  </figure>
 
   <div class="review-pair">
-    <div class="result-panel">
-      <img src="{{ left_url }}" alt="结果 A">
-      <div class="caption">
-        <strong>结果 A</strong>
-        <span class="small muted">{{ task.review_result_label }}</span>
-      </div>
-    </div>
-    <div class="result-panel">
-      <img src="{{ right_url }}" alt="结果 B">
-      <div class="caption">
-        <strong>结果 B</strong>
-        <span class="small muted">{{ task.review_result_label }}</span>
-      </div>
-    </div>
+    <label class="result-panel" for="choice-left" data-panel="left">
+      <span class="result-frame"><img src="{{ left_url }}" alt="结果 A"></span>
+      <span class="caption">结果 A</span>
+    </label>
+    <label class="result-panel" for="choice-right" data-panel="right">
+      <span class="result-frame"><img src="{{ right_url }}" alt="结果 B"></span>
+      <span class="caption">结果 B</span>
+    </label>
   </div>
 
-  <div class="vote-row">
-    <button class="btn" type="submit" name="choice" value="left">结果 A 更好 <span class="small" style="opacity:.7">(A)</span></button>
-    <button class="btn" type="submit" name="choice" value="right">结果 B 更好 <span class="small" style="opacity:.7">(B)</span></button>
+  <h2 class="review-question">请选择更合理的{{ task.review_result_label }}。</h2>
+
+  <div class="choice-list">
+    <label class="choice-item">
+      <input type="radio" name="choice" id="choice-left" value="left" required>
+      <span>结果 A 更好</span>
+      <span class="choice-key">A</span>
+    </label>
+    <label class="choice-item">
+      <input type="radio" name="choice" id="choice-right" value="right">
+      <span>结果 B 更好</span>
+      <span class="choice-key">B</span>
+    </label>
+    {% if allow_tie %}
+    <label class="choice-item">
+      <input type="radio" name="choice" id="choice-tie" value="tie">
+      <span>两者质量相近</span>
+    </label>
+    <label class="choice-item">
+      <input type="radio" name="choice" id="choice-both_bad" value="both_bad">
+      <span>两者均存在明显问题</span>
+    </label>
+    {% endif %}
   </div>
-  {% if allow_tie %}
-  <div class="vote-sub">
-    <button class="btn ghost" type="submit" name="choice" value="tie">两者质量相近</button>
-    <button class="btn ghost" type="submit" name="choice" value="both_bad">两者均存在明显问题</button>
-  </div>
-  {% endif %}
 
   <p class="rubric">
-    凭第一印象即可，无需长时间纠结。每完成一次评价不可修改。
+    {{ task.review_hint|default:"评价依据：细节是否保留、对比度是否合理、整体是否自然、有无明显伪影。" }}
+    每完成一次评价不可修改，凭第一印象即可。
   </p>
+
+  <div class="review-actions">
+    <button class="btn" type="submit" id="submitBtn" disabled>提交并进入下一题</button>
+    <span class="small muted">快捷键：A / B 选择，Enter 提交</span>
+  </div>
 </form>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
   (function () {
+    var form = document.getElementById('voteForm');
     var start = Date.now();
-    document.getElementById('voteForm').addEventListener('submit', function () {
+    var submitBtn = document.getElementById('submitBtn');
+    var radios = Array.prototype.slice.call(form.querySelectorAll('input[name="choice"]'));
+    var panels = Array.prototype.slice.call(form.querySelectorAll('.result-panel'));
+
+    function sync() {
+      var checked = form.querySelector('input[name="choice"]:checked');
+      submitBtn.disabled = !checked;
+      panels.forEach(function (panel) {
+        panel.classList.toggle('is-selected', !!checked && checked.value === panel.dataset.panel);
+      });
+    }
+
+    radios.forEach(function (radio) { radio.addEventListener('change', sync); });
+    sync();
+
+    form.addEventListener('submit', function () {
       document.getElementById('durationInput').value = String(Date.now() - start);
     });
+
     document.addEventListener('keydown', function (e) {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey) return;
       var key = e.key.toLowerCase();
-      var value = {a: 'left', b: 'right'}[key];
-      if (!value) return;
-      e.preventDefault();
-      var input = document.getElementById('choiceInput');
-      input.value = value;
-      document.getElementById('durationInput').value = String(Date.now() - start);
-      document.getElementById('voteForm').submit();
+      var map = { a: 'choice-left', b: 'choice-right' };
+      if (map[key]) {
+        e.preventDefault();
+        document.getElementById(map[key]).checked = true;
+        sync();
+        return;
+      }
+      if (key === 'enter' && !submitBtn.disabled) {
+        e.preventDefault();
+        form.submit();
+      }
     });
   })();
 </script>

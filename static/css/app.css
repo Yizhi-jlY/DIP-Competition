@@ -338,7 +338,9 @@ main { padding: 30px 0 64px; }
   box-shadow: var(--shadow-xs);
 }
 .card-pad { padding: 22px 24px; }
-.card + .card { margin-top: 16px; }
+/* 仅在纵向堆叠的侧栏里加间距；grid 内的卡片由 gap 控制，避免 margin 把同行卡片顶下去 */
+aside > .card + .card,
+.split > div > .card + .card { margin-top: 16px; }
 
 /* Hero：报告封面式 —— 网格底纹 + 顶部蓝线 */
 .hero {

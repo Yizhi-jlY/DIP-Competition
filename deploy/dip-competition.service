@@ -9,9 +9,10 @@ WorkingDirectory=/home/jlyao/Desktop/DIP-Competition
 EnvironmentFile=/home/jlyao/Desktop/DIP-Competition/.env
 ExecStart=/home/jlyao/Desktop/DIP-Competition/.venv/bin/gunicorn web.wsgi:application \
     --bind 0.0.0.0:8000 \
-    --workers 3 \
-    --threads 2 \
-    --timeout 90 \
+    --workers 10 \
+    --threads 4 \
+    --timeout 120 \
+    --graceful-timeout 30 \
     --access-logfile - \
     --error-logfile -
 Restart=always

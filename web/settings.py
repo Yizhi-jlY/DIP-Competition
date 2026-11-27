@@ -138,6 +138,9 @@ LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/login/"
 
+# 会话存于签名 Cookie：SQLite 只有一个写者，140 人同时登录时写 session 表会互相等锁，
+# 是并发登录的主要瓶颈。改为无状态会话后，登录只需一次 last_login 更新。
+SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_COOKIE_AGE = 60 * 60 * 12

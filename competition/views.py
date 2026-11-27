@@ -63,7 +63,11 @@ class CompetitionLoginView(LoginView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["tasks"] = load_config().tasks
+        config = load_config()
+        # Django 的 LoginView 会注入自己的 "site"(RequestSite) 覆盖同名变量，
+        # 因此站点信息另用 brand 键传给模板。
+        ctx["brand"] = config
+        ctx["tasks"] = config.tasks
         return ctx
 
 

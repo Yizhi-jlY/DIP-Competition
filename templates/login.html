@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>登录 · {{ site.title }}</title>
+  <meta name="theme-color" content="#ffffff">
+  <meta name="color-scheme" content="light">
+  <title>登录 · {{ brand.title }}</title>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
 </head>
@@ -12,7 +14,7 @@
   <div class="card auth-card">
     <div class="auth-brand">
       <span class="brand-mark">DIP</span>
-      <strong>{{ site.title }}</strong>
+      <strong>{{ brand.title }}</strong>
     </div>
     <h1>学生登录</h1>
     <p class="sub">使用学号登录。初始密码由教师下发，首次登录后请立即修改。</p>
@@ -41,7 +43,7 @@
     </form>
 
     <p class="small muted" style="margin-top:18px">
-      {{ site.subtitle }} · 提交结果图像，服务器自动评测并生成排行榜。
+      {% if brand.subtitle %}{{ brand.subtitle }} · {% endif %}提交结果图像，服务器自动评测并生成排行榜。
     </p>
   </div>
 </div>

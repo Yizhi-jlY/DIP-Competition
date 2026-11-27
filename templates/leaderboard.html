@@ -6,11 +6,8 @@
 <div class="page-head">
   <div class="eyebrow">Leaderboard</div>
   <h1>排行榜</h1>
-  <p>
-    去噪榜按两图平均 <strong>PSNR</strong>（dB）排序，PSNR 相同时比较平均 <strong>SSIM</strong>；
-    去色榜按两图平均 <strong>E-score</strong> 排序，同分时比较平均 <strong>CCPR</strong>。
-    两个任务各有一张<strong>主观榜</strong>，由全班匿名两两比较的 Bradley–Terry 拟合结果排序；
-    「综合 · 主观」把两张主观榜按权重合成一个总分。
+  <p class="page-lead">
+    按任务与评分方式分榜：客观分看图像指标，主观分看全班匿名互评。<br>
     只有已确认的最终作品参与排名。
   </p>
 </div>
@@ -31,12 +28,10 @@
 {% elif board_type == 'combined' %}
   <div class="rule-note" style="margin:14px 0 18px">
     <span class="rule-tag">排名依据</span>
-    <span>
-      综合主观分 = {% widthratio combined_weights.denoise 1 100 %}% × 去噪主观分 +
-      {% widthratio combined_weights.decolor 1 100 %}% × 去色主观分。
-      两个任务各自用 Bradley–Terry 独立拟合（各自 0–100 分），再按上面的权重合成；
-      只有两项都有主观分的学生参与排名，同分时看两项中较低的一项。
-    </span>
+    <div class="rule-body">
+      <p>综合主观分 = {% widthratio combined_weights.denoise 1 100 %}% × 去噪主观分 + {% widthratio combined_weights.decolor 1 100 %}% × 去色主观分。</p>
+      <p class="rule-sub">两榜各自独立拟合；两项都有分才参与排名，同分时看较低的一项。</p>
+    </div>
   </div>
 
   <div class="section-title"><h2>综合主观榜</h2><span>去噪主观 + 去色主观</span></div>
@@ -90,8 +85,10 @@
 {% elif board_type == 'subjective' %}
   <div class="rule-note" style="margin:14px 0 18px">
     <span class="rule-tag">排名依据</span>
-    <span>按 Bradley–Terry 偏好模型拟合的预测胜率（换算为 0–100 分）从高到低排名；
-      数据来自全班对「{{ task.name }}」{{ task.images|length }} 张图的匿名两两比较，每人 {{ review_count }} 份。</span>
+    <div class="rule-body">
+      <p>按 Bradley–Terry 拟合的预测胜率换算成 0–100 分排名。</p>
+      <p class="rule-sub">数据来自全班对「{{ task.name }}」{{ task.images|length }} 张图的匿名两两比较，每人 {{ review_count }} 份。</p>
+    </div>
   </div>
 
   <div class="section-title"><h2>{{ task.name }} · 匿名主观评价</h2><span>Bradley–Terry 偏好模型</span></div>
@@ -133,7 +130,7 @@
 {% else %}
   <div class="rule-note" style="margin:14px 0 18px">
     <span class="rule-tag">排名依据</span>
-    <span>{{ ranking_rule }}；只有已确认为最终作品的记录参与排名。</span>
+    <span>{{ ranking_rule }}。</span>
   </div>
 
   <div class="section-title">

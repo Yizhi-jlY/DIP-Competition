@@ -111,11 +111,13 @@
 
     <div class="card card-pad">
       <h3 style="margin:0 0 8px;font-size:16px">榜单说明</h3>
-      <p class="small muted" style="margin:0 0 8px">
-        去噪榜以平均 PSNR 排名、SSIM 作同分依据；去色客观榜以平均 E-score 排名；
-        两个任务各有一张主观榜，均由 Bradley–Terry 偏好模型对全班匿名两两比较拟合得到。
-      </p>
-      <a class="small" href="{% url 'leaderboard' %}">查看四类排行榜 →</a>
+      <ul class="mini-list">
+        <li><span>去噪客观</span>平均 PSNR，同分看 SSIM</li>
+        <li><span>去色客观</span>平均 E-score，同分看 CCPR</li>
+        <li><span>两张主观榜</span>Bradley–Terry 拟合</li>
+        <li><span>综合榜</span>两张主观榜加权合成</li>
+      </ul>
+      <a class="small" href="{% url 'leaderboard' %}">查看全部榜单 →</a>
     </div>
   </aside>
 </div>

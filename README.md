@@ -153,7 +153,7 @@ systemctl --user enable --now dip-competition
 
 ### 用 git 维护（当前采用）
 
-代码仓库：<https://github.com/Yizhi-jlY/DIP-Competition>（私有）。服务器上的项目目录就是一个 clone，
+代码仓库：<https://github.com/Yizhi-jlY/DIP-Competition>（公开）。服务器上的项目目录就是一个 clone，
 `.env`、`.venv`、`data/`、`storage/`、`staticfiles/` 都被 `.gitignore` 排除，所以 `git pull` 不会覆盖运行数据。
 
 ```bash

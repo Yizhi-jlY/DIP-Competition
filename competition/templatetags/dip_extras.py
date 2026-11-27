@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from django import template
+from django.utils.safestring import mark_safe
 
 register = template.Library()
 
@@ -48,4 +49,11 @@ def metric_of(submission, key):
 
 @register.filter
 def medal(rank):
-    return {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, str(rank) if rank else "—")
+    """名次徽章：前三名渲染为 CSS 圆徽，其余直接输出数字（不使用 emoji 图标）。"""
+    try:
+        value = int(rank)
+    except (TypeError, ValueError):
+        return "—"
+    if 1 <= value <= 3:
+        return mark_safe(f'<span class="medal m{value}">{value}</span>')
+    return str(value)

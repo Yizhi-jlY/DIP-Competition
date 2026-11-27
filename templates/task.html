@@ -62,7 +62,7 @@
               <button class="btn small block" type="submit">上传并自动评分</button>
             </form>
             {% else %}
-              <div class="help">该图提交次数已用完（{{ task.max_submissions }} 次）。</div>
+              <div class="help">该图当前不可提交，请联系任课教师。</div>
             {% endif %}
           {% else %}
             <div class="help">当前阶段不接受提交。</div>

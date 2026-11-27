@@ -173,3 +173,10 @@ scoring:
   # 综合主观分 = w_denoise * 去噪主观分 + w_decolor * 去色主观分（两者自动归一化，填 1:1 即为等权平均）
   denoise_subjective_weight: 0.5
   decolor_subjective_weight: 0.5
+  # 总排名：去噪客观、去色客观、主观综合 三项线性加权（自动归一化，写 4/3/3 与 40/30/30 等价）
+  # 教师面板「总排名权重」可在线覆盖这三项，无需改本文件
+  total_denoise_weight: 0.4
+  total_decolor_weight: 0.3
+  total_subjective_weight: 0.3
+  # 分项折算方式：score = 分数归一化到 0–100（保留分差）；rank = 名次折算到 0–100
+  total_normalize: score

@@ -205,6 +205,12 @@ class ScoringSpec:
     # 综合主观分 = w_denoise × 去噪主观分 + w_decolor × 去色主观分（加载时自动归一化）
     denoise_subjective_weight: float = 0.5
     decolor_subjective_weight: float = 0.5
+    # 总排名：三项线性加权（去噪客观 / 去色客观 / 主观综合）
+    total_denoise_weight: float = 0.4
+    total_decolor_weight: float = 0.3
+    total_subjective_weight: float = 0.3
+    # 分项折算方式：score = 分数归一化到 0–100；rank = 名次折算到 0–100
+    total_normalize: str = "score"
 
     def combined_weights(self) -> Dict[str, float]:
         d = max(0.0, float(self.denoise_subjective_weight))
@@ -213,6 +219,20 @@ class ScoringSpec:
         if total <= 0:
             return {"denoise": 0.5, "decolor": 0.5}
         return {"denoise": d / total, "decolor": c / total}
+
+    def total_weights(self) -> Dict[str, float]:
+        """总排名的三项权重，自动归一化到和为 1。"""
+        d = max(0.0, float(self.total_denoise_weight))
+        c = max(0.0, float(self.total_decolor_weight))
+        s = max(0.0, float(self.total_subjective_weight))
+        total = d + c + s
+        if total <= 0:
+            return {"denoise": 1 / 3, "decolor": 1 / 3, "subjective": 1 / 3}
+        return {"denoise": d / total, "decolor": c / total, "subjective": s / total}
+
+    def total_mode(self) -> str:
+        mode = (self.total_normalize or "score").strip().lower()
+        return mode if mode in ("score", "rank") else "score"
 
 
 @dataclass(frozen=True)
@@ -353,6 +373,10 @@ def _parse(raw: Dict[str, Any]) -> Config:
         weight_subjective=float(sc_raw.get("weight_subjective", 0.6)),
         denoise_subjective_weight=float(sc_raw.get("denoise_subjective_weight", 0.5)),
         decolor_subjective_weight=float(sc_raw.get("decolor_subjective_weight", 0.5)),
+        total_denoise_weight=float(sc_raw.get("total_denoise_weight", 0.4)),
+        total_decolor_weight=float(sc_raw.get("total_decolor_weight", 0.3)),
+        total_subjective_weight=float(sc_raw.get("total_subjective_weight", 0.3)),
+        total_normalize=str(sc_raw.get("total_normalize", "score")),
     )
 
     # 学术参数：默认值只在 research/params.py 定义一次，yaml 写了就覆盖

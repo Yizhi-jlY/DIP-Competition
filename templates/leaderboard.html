@@ -22,8 +22,73 @@
   <div class="card card-pad">
     <p class="muted" style="margin:0">教师尚未公开排行榜。提交期间可以在「我的提交」中查看自己的分数。</p>
   </div>
-{% elif not task and board_type != 'combined' %}
+{% elif not task and board_type != 'combined' and board_type != 'total' %}
   <div class="card card-pad"><p class="muted" style="margin:0">该榜单暂无数据。</p></div>
+
+{% elif board_type == 'total' %}
+  <div class="rule-note" style="margin:14px 0 18px">
+    <span class="rule-tag">排名依据</span>
+    <div class="rule-body">
+      <p>
+        总分 = {% widthratio total_weights.denoise 1 100 %}% × 去噪客观
+        + {% widthratio total_weights.decolor 1 100 %}% × 去色客观
+        + {% widthratio total_weights.subjective 1 100 %}% × 主观综合。
+      </p>
+      <p class="rule-sub">
+        三项量纲不同，先各自折成 0–100 分（当前：{{ total_mode_label }}）再加权；
+        三项齐全才参与排名，缺项的列在下方。权重由教师在「运行设置」中调整。
+      </p>
+    </div>
+  </div>
+
+  <div class="section-title"><h2>总排名</h2><span>客观 + 客观 + 主观 加权</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th class="rank">排名</th><th>参赛编号</th>
+          <th class="num">总分<span class="th-note">排名依据</span></th>
+          <th class="num">去噪客观<span class="th-note">折算分 · {{ denoise_metric.name }}</span></th>
+          <th class="num">去色客观<span class="th-note">折算分 · {{ decolor_metric.name }}</span></th>
+          <th class="num">主观综合<span class="th-note">折算分 · 原始分</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if user.profile.contest_code == row.code %}me{% endif %}">
+          <td class="rank">{{ row.rank|medal }}</td>
+          <td class="mono">{{ row.code }}</td>
+          <td class="num mono"><strong>{{ row.score|fmt:2 }}</strong></td>
+          <td class="num mono">{{ row.denoise_part|fmt:1 }}<span class="th-note">{{ row.denoise_value|fmt:2 }}{{ denoise_metric.unit }} · #{{ row.denoise_rank }}</span></td>
+          <td class="num mono">{{ row.decolor_part|fmt:1 }}<span class="th-note">{{ row.decolor_value|fmt:4 }} · #{{ row.decolor_rank }}</span></td>
+          <td class="num mono">{{ row.subjective_part|fmt:1 }}<span class="th-note">{{ row.subjective_score|fmt:2 }} · #{{ row.subjective_rank }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="empty">还没有同时具备客观分与主观综合分的数据。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pending_rows %}
+  <div class="section-title"><h2>未纳入总排名</h2><span>{{ pending_rows|length }} 人缺少分项</span></div>
+  <div class="card table-wrap">
+    <table class="data">
+      <thead><tr><th>参赛编号</th><th class="num">去噪客观</th><th class="num">去色客观</th><th class="num">主观综合</th><th>缺少</th></tr></thead>
+      <tbody>
+        {% for row in pending_rows %}
+        <tr>
+          <td class="mono">{{ row.code }}</td>
+          <td class="num mono">{% if row.denoise_value is not None %}{{ row.denoise_value|fmt:2 }}{% else %}—{% endif %}</td>
+          <td class="num mono">{% if row.decolor_value is not None %}{{ row.decolor_value|fmt:4 }}{% else %}—{% endif %}</td>
+          <td class="num mono">{% if row.subjective_score is not None %}{{ row.subjective_score|fmt:2 }}{% else %}—{% endif %}</td>
+          <td>{{ row.missing|join:"、" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 
 {% elif board_type == 'combined' %}
   <div class="rule-note" style="margin:14px 0 18px">

@@ -122,6 +122,77 @@
     </div>
 
     <div class="card card-pad">
+      <h3 style="margin:0 0 10px;font-size:16px">总排名权重</h3>
+      <p class="small muted" style="margin:0 0 14px">
+        总排名 = 去噪客观 + 去色客观 + 主观综合，三项先各自折成 0–100 分再线性加权。<br>
+        三项量纲不同（PSNR 是 dB、E-score 在 0–1、主观分 0–100），所以不能直接相加；
+        填任意正数即可，系统按比例归一化（例如 4 / 3 / 3 等于 40% / 30% / 30%）。
+      </p>
+
+      <form method="post" action="{% url 'staff_settings' %}">
+        {% csrf_token %}
+        <input type="hidden" name="section" value="total">
+        <div class="table-wrap">
+          <table class="data" style="min-width:0">
+            <thead>
+              <tr><th>分项</th><th>依据</th><th class="num">权重</th><th class="num">当前占比</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>去噪客观</strong></td>
+                <td class="small muted">平均 PSNR（SSIM 为同分依据）</td>
+                <td class="num">
+                  <input class="input small mono" type="number" name="w_denoise"
+                         value="{% widthratio total_weights.denoise 1 100 %}"
+                         min="0" max="100" step="1" style="width:88px" aria-label="去噪客观权重">
+                </td>
+                <td class="num mono">{% widthratio total_weights.denoise 1 100 %}%</td>
+              </tr>
+              <tr>
+                <td><strong>去色客观</strong></td>
+                <td class="small muted">平均 E-score（CCPR 为同分依据）</td>
+                <td class="num">
+                  <input class="input small mono" type="number" name="w_decolor"
+                         value="{% widthratio total_weights.decolor 1 100 %}"
+                         min="0" max="100" step="1" style="width:88px" aria-label="去色客观权重">
+                </td>
+                <td class="num mono">{% widthratio total_weights.decolor 1 100 %}%</td>
+              </tr>
+              <tr>
+                <td><strong>主观综合</strong></td>
+                <td class="small muted">去噪主观 + 去色主观（各自 BT 拟合）</td>
+                <td class="num">
+                  <input class="input small mono" type="number" name="w_subjective"
+                         value="{% widthratio total_weights.subjective 1 100 %}"
+                         min="0" max="100" step="1" style="width:88px" aria-label="主观综合权重">
+                </td>
+                <td class="num mono">{% widthratio total_weights.subjective 1 100 %}%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="check-row" style="margin-top:12px">
+          <label class="check">
+            <span class="small muted">分项折算</span>
+            <select class="input small" name="total_normalize" style="margin-left:8px">
+              {% for value, text in total_modes.items %}
+              <option value="{{ value }}" {% if total_mode == value %}selected{% endif %}>{{ text }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <p class="small muted" style="margin:8px 0 0">
+          按分数折算：各项在全体参赛者里做 min–max 映射，保留分差比例；<br>
+          按名次折算：第 1 名 100 分、最后一名 0 分，按名次均匀分布，抗异常值但忽略分差大小。
+        </p>
+
+        <button class="btn small" type="submit" style="margin-top:14px">保存总排名权重</button>
+        <a class="btn ghost small" href="{% url 'leaderboard' %}?board=total" style="margin-left:8px">查看总排名</a>
+      </form>
+    </div>
+
+    <div class="card card-pad">
       <h3 style="margin:0 0 10px;font-size:16px">成绩与作品导出</h3>
       <div class="action-row">
         <a class="btn small" href="{% url 'export_scores' %}">导出成绩 CSV</a>

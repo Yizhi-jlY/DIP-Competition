@@ -19,7 +19,7 @@ def leaderboard_view(request: HttpRequest):
     if board == "decolor-objective":  # 旧链接兼容
         board = "decolor"
     slugs = list(config.task_map())
-    valid = set(slugs) | {f"{slug}-subjective" for slug in slugs} | {"combined"}
+    valid = set(slugs) | {f"{slug}-subjective" for slug in slugs} | {"combined", "total"}
     if board not in valid:
         board = slugs[0] if slugs else "denoise"
 
@@ -33,6 +33,7 @@ def leaderboard_view(request: HttpRequest):
     subjective_slugs = [t.slug for t in config.tasks if config.peer_review.for_task(t.slug).enabled]
     if len(subjective_slugs) >= 2:
         board_tabs.append({"slug": "combined", "label": "综合 · 主观"})
+        board_tabs.append({"slug": "total", "label": "总排名"})
 
     ctx: Dict[str, object] = {
         "config": config,
@@ -46,7 +47,22 @@ def leaderboard_view(request: HttpRequest):
     if not allowed:
         return render_page(request, "leaderboard.html", ctx)
 
-    if board == "combined":
+    if board == "total":
+        rows, pending, total_weights, total_mode = leaderboard.total_rows()
+        d_task, c_task = config.task("denoise"), config.task("decolor")
+        ctx.update(
+            {
+                "rows": rows,
+                "pending_rows": pending,
+                "board_type": "total",
+                "total_weights": total_weights,
+                "total_mode": total_mode,
+                "total_mode_label": leaderboard.TOTAL_MODES.get(total_mode, ""),
+                "denoise_metric": d_task.metric(d_task.ranking_metric) if d_task else None,
+                "decolor_metric": c_task.metric(c_task.ranking_metric) if c_task else None,
+            }
+        )
+    elif board == "combined":
         rows, pending, weights = leaderboard.combined_subjective_rows()
         ctx.update(
             {

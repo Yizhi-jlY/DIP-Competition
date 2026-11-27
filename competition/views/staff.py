@@ -96,6 +96,8 @@ def staff_dashboard(request: HttpRequest):
         },
     ]
 
+    total_weights, total_mode = leaderboard.total_settings()
+
     return render_page(
         request,
         "staff.html",
@@ -108,6 +110,9 @@ def staff_dashboard(request: HttpRequest):
             "baseline_count": baseline_count,
             "final_count": final_count,
             "checks": checks,
+            "total_weights": total_weights,
+            "total_mode": total_mode,
+            "total_modes": leaderboard.TOTAL_MODES,
         },
     )
 
@@ -211,6 +216,38 @@ def staff_settings(request: HttpRequest):
             "评价份数已保存：" + "、".join(
                 f"{t.short_name} {counts.get(t.slug, 0)} 份" for t in config.review_tasks()
             ) + "。修改份数后请重新分配对应任务的互评。",
+        )
+
+    elif section == "total":
+        raw: Dict[str, float] = {}
+        labels = {"denoise": "去噪客观", "decolor": "去色客观", "subjective": "主观综合"}
+        for key, label in labels.items():
+            text = (request.POST.get(f"w_{key}") or "").strip()
+            try:
+                value = float(text)
+            except (TypeError, ValueError):
+                messages.error(request, f"{label}权重必须是数字。")
+                return redirect("staff_dashboard")
+            if value < 0 or value > 100:
+                messages.error(request, f"{label}权重需在 0–100 之间。")
+                return redirect("staff_dashboard")
+            raw[key] = value
+        if sum(raw.values()) <= 0:
+            messages.error(request, "三项权重之和必须大于 0，否则无法计算总排名。")
+            return redirect("staff_dashboard")
+        mode = request.POST.get("total_normalize", "score")
+        if mode not in leaderboard.TOTAL_MODES:
+            mode = "score"
+        setting.total_weights = raw
+        setting.total_normalize = mode
+        setting.save(update_fields=["total_weights", "total_normalize", "updated_at"])
+
+        weights = leaderboard.total_settings()[0]
+        messages.success(
+            request,
+            "总排名权重已保存："
+            + "、".join(f"{labels[k]} {v * 100:.1f}%" for k, v in weights.items())
+            + f"（{leaderboard.TOTAL_MODES[mode]}）。",
         )
 
     elif section == "registration":

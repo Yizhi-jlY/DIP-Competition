@@ -366,6 +366,127 @@ class MultiTaskReviewTests(TestCase):
         zero = ScoringSpec(denoise_subjective_weight=0, decolor_subjective_weight=0)
         self.assertEqual(zero.combined_weights(), {"denoise": 0.5, "decolor": 0.5})
 
+    # ------------------------------------------------------------ 总排名
+    def _full_setup(self):
+        """两任务都有最终作品、都已互评投票的完整场景。"""
+        users = self._students()
+        for i, user in enumerate(users):
+            self._denoise_sub(user, i)
+            self._decolor_sub(user, i)
+
+        setting = AppSetting.get()
+        setting.submission_close = timezone.now() - timedelta(hours=2)
+        setting.review_open = timezone.now() - timedelta(hours=1)
+        setting.review_close = timezone.now() + timedelta(days=1)
+        setting.save()
+
+        denoise, decolor = get_task("denoise"), get_task("decolor")
+        reviews.allocate_reviews(denoise, per_student=2, seed=1)
+        reviews.allocate_reviews(decolor, per_student=2, seed=2)
+        for user in users:
+            for task in (denoise, decolor):
+                for assignment in ReviewAssignment.objects.filter(reviewer=user, task=task.slug):
+                    reviews.record_vote(assignment, "left")
+        return users
+
+    def test_total_ranking_is_weighted_sum_of_three_parts(self):
+        users = self._full_setup()
+        rows, pending, weights, mode = leaderboard.total_rows()
+
+        self.assertEqual(len(rows), len(users))
+        self.assertEqual(pending, [])
+        self.assertEqual(mode, "score")
+        self.assertAlmostEqual(sum(weights.values()), 1.0)
+        # yaml 默认 4 : 3 : 3
+        self.assertAlmostEqual(weights["denoise"], 0.4)
+        self.assertAlmostEqual(weights["decolor"], 0.3)
+        self.assertAlmostEqual(weights["subjective"], 0.3)
+
+        for row in rows:
+            expected = round(
+                weights["denoise"] * row.denoise_part
+                + weights["decolor"] * row.decolor_part
+                + weights["subjective"] * row.subjective_part,
+                2,
+            )
+            self.assertAlmostEqual(row.score, expected)
+            for part in (row.denoise_part, row.decolor_part, row.subjective_part):
+                self.assertGreaterEqual(part, 0.0)
+                self.assertLessEqual(part, 100.0)
+
+        scores = [r.score for r in rows]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertEqual(rows[0].rank, 1)
+
+    def test_total_weights_editable_and_rank_mode(self):
+        users = self._full_setup()
+        staff = User.objects.create_user(username="teacherT", password="pass12345", is_staff=True)
+        self.client.force_login(staff)
+
+        resp = self.client.post(
+            reverse("staff_settings"),
+            {
+                "section": "total",
+                "w_denoise": "1",
+                "w_decolor": "1",
+                "w_subjective": "2",
+                "total_normalize": "rank",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+
+        setting = AppSetting.get()
+        self.assertEqual(
+            setting.total_weights, {"denoise": 1.0, "decolor": 1.0, "subjective": 2.0}
+        )
+        self.assertEqual(setting.total_normalize, "rank")
+
+        rows, _, weights, mode = leaderboard.total_rows()
+        self.assertEqual(mode, "rank")
+        self.assertAlmostEqual(weights["denoise"], 0.25)
+        self.assertAlmostEqual(weights["decolor"], 0.25)
+        self.assertAlmostEqual(weights["subjective"], 0.5)
+
+        resp = self.client.get(reverse("leaderboard") + "?board=total")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "总排名")
+        self.assertContains(resp, "25%")
+        self.assertContains(resp, "50%")
+        self.assertContains(resp, "按名次折算")
+
+        resp = self.client.get(reverse("staff_dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "总排名权重")
+
+    def test_total_ranking_excludes_incomplete(self):
+        """只有单个分项的学生不进总排名，而是列进「未纳入」。"""
+        users = self._full_setup()
+        lone = User.objects.create_user(username="20262088", password="pass12345")
+        Profile.objects.create(
+            user=lone, student_id="20262088", real_name="单项", contest_code="S288",
+            must_change_password=False,
+        )
+        self._denoise_sub(lone, 5)
+
+        rows, pending, _, _ = leaderboard.total_rows()
+        self.assertEqual(len(rows), len(users))
+        self.assertTrue(any(p.student and p.student.id == lone.id for p in pending))
+        self.assertFalse(any(r.student and r.student.id == lone.id for r in rows))
+        self.assertIn("主观综合", pending[0].missing)
+
+    def test_total_weights_reject_all_zero(self):
+        self._full_setup()
+        staff = User.objects.create_user(username="teacherZ", password="pass12345", is_staff=True)
+        self.client.force_login(staff)
+        resp = self.client.post(
+            reverse("staff_settings"),
+            {"section": "total", "w_denoise": "0", "w_decolor": "0", "w_subjective": "0",
+             "total_normalize": "score"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        # 拒绝保存，仍是空（沿用 yaml）
+        self.assertEqual(AppSetting.get().total_weights, {})
+
 
 class ObjectiveRankingTests(TestCase):
     """客观排名快照：教师后台看到的按指标排名要与榜单页一致。"""

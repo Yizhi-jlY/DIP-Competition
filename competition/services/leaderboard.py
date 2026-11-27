@@ -328,6 +328,177 @@ def combined_by_student() -> Dict[int, CombinedRow]:
     return out
 
 
+# ---------------------------------------------------------------- 总排名
+@dataclass
+class TotalRow:
+    """总排名的一行：三项折算分（0–100）加权得到总分。"""
+
+    code: str
+    name: str
+    student: Optional[User]
+    score: Optional[float] = None
+    denoise_value: Optional[float] = None       # 原始指标均值（PSNR dB / E-score）
+    denoise_rank: Optional[int] = None
+    denoise_part: Optional[float] = None        # 折算分 0–100
+    decolor_value: Optional[float] = None
+    decolor_rank: Optional[int] = None
+    decolor_part: Optional[float] = None
+    subjective_score: Optional[float] = None    # 主观综合分（0–100）
+    subjective_rank: Optional[int] = None
+    subjective_part: Optional[float] = None
+    rank: Optional[int] = None
+    missing: List[str] = field(default_factory=list)
+
+
+TOTAL_MODES = {"score": "按分数折算", "rank": "按名次折算"}
+
+
+def total_settings() -> Tuple[Dict[str, float], str]:
+    """总排名的权重与折算方式：教师面板设置优先，未设置时用 yaml。"""
+    config = load_config()
+    weights = config.scoring.total_weights()
+    mode = config.scoring.total_mode()
+    try:
+        from competition.models import AppSetting
+
+        setting = AppSetting.objects.filter(singleton_id=1).first()
+        raw = dict(setting.total_weights or {}) if setting else {}
+        if raw:
+            d = max(0.0, float(raw.get("denoise", weights["denoise"])))
+            c = max(0.0, float(raw.get("decolor", weights["decolor"])))
+            s = max(0.0, float(raw.get("subjective", weights["subjective"])))
+            total = d + c + s
+            if total > 0:
+                weights = {"denoise": d / total, "decolor": c / total, "subjective": s / total}
+        if setting and setting.total_normalize in TOTAL_MODES:
+            mode = setting.total_normalize
+    except Exception:  # noqa: BLE001 - 数据库未就绪时回落到 yaml
+        pass
+    return weights, mode
+
+
+def _scale(value: Optional[float], lo: float, hi: float) -> Optional[float]:
+    """把分数线性映射到 0–100；全员同分时统一给 100。"""
+    if value is None:
+        return None
+    if hi - lo <= 1e-12:
+        return 100.0
+    return max(0.0, min(100.0, (value - lo) / (hi - lo) * 100.0))
+
+
+def _scale_rank(rank: Optional[int], count: int) -> Optional[float]:
+    """名次折算：第 1 名 100 分，最后一名 0 分；只有一个参赛者时给 100。"""
+    if not rank:
+        return None
+    if count <= 1:
+        return 100.0
+    return (count - rank) / (count - 1) * 100.0
+
+
+def total_rows():
+    """总排名 = w1×去噪客观 + w2×去色客观 + w3×主观综合（三项都折成 0–100）。
+
+    返回 ``(rows, pending, weights, mode)``。三项齐全的学生才参与排名；
+    缺项的放在 ``pending``，避免半张成绩和完整成绩直接比。
+    """
+    config = load_config()
+    weights, mode = total_settings()
+    denoise = config.task("denoise")
+    decolor = config.task("decolor")
+
+    d_rows, _, _ = objective_rows(denoise) if denoise else ([], [], [])
+    c_rows, _, _ = objective_rows(decolor) if decolor else ([], [], [])
+    s_rows, s_pending, _ = combined_subjective_rows()
+
+    d_map = {r.student.id: r for r in d_rows if r.student}
+    c_map = {r.student.id: r for r in c_rows if r.student}
+    s_map = {r.student.id: r for r in s_rows if r.student}
+
+    def bounds(rows: Sequence[ObjectiveRow]) -> Tuple[float, float]:
+        values = [r.mean for r in rows if r.mean is not None]
+        return (min(values), max(values)) if values else (0.0, 0.0)
+
+    d_lo, d_hi = bounds(d_rows)
+    c_lo, c_hi = bounds(c_rows)
+    s_values = [r.score for r in s_rows if r.score is not None]
+    s_lo, s_hi = (min(s_values), max(s_values)) if s_values else (0.0, 0.0)
+
+    rows: List[TotalRow] = []
+    pending: List[TotalRow] = []
+
+    for student_id in set(d_map) | set(c_map) | set(s_map):
+        d, c, s = d_map.get(student_id), c_map.get(student_id), s_map.get(student_id)
+        student = (d or c or s).student
+        profile = getattr(student, "profile", None)
+        row = TotalRow(
+            code=profile.contest_code if profile else student.username,
+            name=profile.real_name if profile else "",
+            student=student,
+            denoise_value=d.mean if d else None,
+            denoise_rank=d.rank if d else None,
+            decolor_value=c.mean if c else None,
+            decolor_rank=c.rank if c else None,
+            subjective_score=s.score if s else None,
+            subjective_rank=s.rank if s else None,
+        )
+        if mode == "rank":
+            row.denoise_part = _scale_rank(row.denoise_rank, len(d_rows))
+            row.decolor_part = _scale_rank(row.decolor_rank, len(c_rows))
+            row.subjective_part = _scale_rank(row.subjective_rank, len(s_rows))
+        else:
+            row.denoise_part = _scale(row.denoise_value, d_lo, d_hi)
+            row.decolor_part = _scale(row.decolor_value, c_lo, c_hi)
+            row.subjective_part = _scale(row.subjective_score, s_lo, s_hi)
+
+        parts = (row.denoise_part, row.decolor_part, row.subjective_part)
+        if all(p is not None for p in parts):
+            row.score = round(
+                weights["denoise"] * row.denoise_part
+                + weights["decolor"] * row.decolor_part
+                + weights["subjective"] * row.subjective_part,
+                2,
+            )
+            rows.append(row)
+        else:
+            missing = []
+            if denoise and d is None:
+                missing.append(f"{denoise.short_name}客观")
+            if decolor and c is None:
+                missing.append(f"{decolor.short_name}客观")
+            if s is None:
+                missing.append("主观综合")
+            row.missing = missing
+            pending.append(row)
+
+    rows.sort(
+        key=lambda r: (
+            -(r.score or 0),
+            -min(r.denoise_part or 0, r.decolor_part or 0, r.subjective_part or 0),
+            -r.subjective_score if r.subjective_score is not None else 0,
+        )
+    )
+    rank = 0
+    last = None
+    for i, row in enumerate(rows, start=1):
+        if last is None or abs((row.score or 0) - last) > 1e-9:
+            rank = i
+            last = row.score
+        row.rank = rank
+
+    pending.sort(key=lambda r: r.code)
+    return rows, pending, weights, mode
+
+
+def total_by_student() -> Dict[int, TotalRow]:
+    """导出用：学生 → 总排名行（含未纳入者，score 为 None）。"""
+    rows, pending, _, _ = total_rows()
+    out: Dict[int, TotalRow] = {}
+    for row in rows + pending:
+        if row.student:
+            out[row.student.id] = row
+    return out
+
+
 def review_stats(task: TaskSpec) -> Dict[str, object]:
     """互评进度与覆盖情况，供教师后台查看。"""
     total = Submission.objects.filter(

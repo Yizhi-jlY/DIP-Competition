@@ -128,6 +128,12 @@ class AppSetting(models.Model):
     # ---- 互评份数（按任务覆盖 yaml） ----
     review_counts = models.JSONField("各任务评价份数", default=dict, blank=True)
 
+    # ---- 总排名三项权重（空表示沿用 yaml 的 scoring 段） ----
+    total_weights = models.JSONField("总排名权重", default=dict, blank=True)
+    total_normalize = models.CharField(
+        "总排名折算方式", max_length=8, blank=True, default=""
+    )
+
     reviews_allocated_at = models.DateTimeField("互评分配时间", null=True, blank=True)
     updated_at = models.DateTimeField("更新时间", auto_now=True)
 

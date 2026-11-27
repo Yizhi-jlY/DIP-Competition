@@ -451,10 +451,11 @@ def my_submissions(request: HttpRequest):
 
 
 # --------------------------------------------------------------- 文件服务
-def _file_response(path: Path, filename: Optional[str] = None, cache: str = "private, max-age=300") -> FileResponse:
+def _file_response(path: Path, filename: Optional[str] = None, cache: str = "private, max-age=300",
+                   content_type: str = "image/png") -> FileResponse:
     if not path.exists():
         raise Http404("文件不存在。")
-    resp = FileResponse(open(path, "rb"), content_type="image/png")
+    resp = FileResponse(open(path, "rb"), content_type=content_type)
     if filename:
         resp["Content-Disposition"] = f'inline; filename="{filename}"'
     resp["Cache-Control"] = cache
@@ -465,7 +466,8 @@ def _thumbnail(src: Path, width: int = 640) -> Path:
     """按需生成缩略图并落盘缓存。
 
     输入图是 768×768 的无损 PNG（约 1.3–1.5 MB），140 人同时刷新任务页会重复下载
-    近 400 MB。页面上改用 640px 缩略图（约 150 KB），"下载输入图"仍给原图。
+    近 400 MB。页面上改用 640px 的 JPEG 缩略图（噪声图用 PNG 仍接近 900 KB，
+    JPEG 约 120 KB），"下载输入图"仍给原 PNG。
     """
     from PIL import Image
 
@@ -473,15 +475,18 @@ def _thumbnail(src: Path, width: int = 640) -> Path:
         rel = src.resolve().relative_to((settings.BASE_DIR / "data").resolve())
     except ValueError:
         return src
-    dst = settings.BASE_DIR / "storage" / "thumbs" / rel.parent / f"{src.stem}_{width}.png"
+    dst = settings.BASE_DIR / "storage" / "thumbs" / rel.parent / f"{src.stem}_{width}.jpg"
     if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
         return dst
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(f".{os.getpid()}.tmp")
     with Image.open(src) as im:
-        im = im.convert("RGB") if im.mode not in ("L", "RGB") else im
-        im.thumbnail((width, width), Image.LANCZOS)
-        im.save(tmp, format="PNG", optimize=True)
+        if im.mode == "L":
+            work = im.convert("L")
+        else:
+            work = im.convert("RGB")
+        work.thumbnail((width, width), Image.LANCZOS)
+        work.save(tmp, format="JPEG", quality=82, optimize=True, progressive=True)
     tmp.replace(dst)  # 原子替换，避免并发下读到半张图
     return dst
 
@@ -493,8 +498,9 @@ def public_image(request: HttpRequest, slug: str, key: str):
         raise Http404
     path = task.public_image(key)
     if request.GET.get("w") == "thumb":
-        path = _thumbnail(path, 640)
-    # 输入图在赛程内不会变化，允许浏览器长缓存，避免反复下载
+        # 输入图在赛程内不会变化，允许浏览器长缓存，避免反复下载
+        return _file_response(_thumbnail(path, 640), cache="private, max-age=86400",
+                              content_type="image/jpeg")
     return _file_response(path, cache="private, max-age=86400")
 
 

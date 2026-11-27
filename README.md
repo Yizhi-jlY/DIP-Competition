@@ -5,6 +5,9 @@
 当前部署：`lf2`（mathlf2.lflab.cn / 222.204.244.237），目录 `/home/jlyao/Desktop/DIP-Competition`，Gunicorn 监听 `8000` 端口，systemd 用户服务 `dip-competition` 常驻。
 访问地址：<http://222.204.244.237:8000>；教师后台：<http://222.204.244.237:8000/admin/>（账号 `teacher`，密码见交付说明）。
 
+> 给老师的检查路线、账号清单与代码索引：[docs/教师审阅说明.md](docs/教师审阅说明.md)；
+> 140 人并发压测记录：[docs/压测报告.md](docs/压测报告.md)。
+
 ---
 
 ## 一、功能

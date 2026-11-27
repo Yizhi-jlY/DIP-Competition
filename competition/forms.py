@@ -93,7 +93,10 @@ class RegistrationForm(forms.Form):
             self.fields.pop("registration_code")
 
     def clean_student_id(self):
-        return registration_service.check_student_id(self.cleaned_data["student_id"])
+        try:
+            return registration_service.check_student_id(self.cleaned_data["student_id"])
+        except registration_service.RegistrationError as exc:
+            raise forms.ValidationError(str(exc)) from exc
 
     def clean_real_name(self):
         name = (self.cleaned_data["real_name"] or "").strip()
@@ -104,7 +107,10 @@ class RegistrationForm(forms.Form):
     def clean_registration_code(self):
         value = self.cleaned_data.get("registration_code", "")
         if self.require_code:
-            registration_service.check_code(value)
+            try:
+                registration_service.check_code(value)
+            except registration_service.RegistrationError as exc:
+                raise forms.ValidationError(str(exc)) from exc
         return value
 
     def clean(self):
